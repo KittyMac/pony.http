@@ -121,6 +121,7 @@ actor HttpServerConnection
 				if event != AsioEvent.none() then
 					@pony_asio_event_set_readable[None](event, false)
 					@pony_asio_event_resubscribe_read(event)
+					@ponyint_actor_yield[None](this)
 				end
 			end
 		end
@@ -178,14 +179,12 @@ actor HttpServerConnection
 		readBuffer.clear()
 	
 	fun ref read():Bool =>
-		while true do
-			try
+		try
+			while true do
+			
 				let len = @pony_os_recv[USize](event, readBuffer.cpointer(readBuffer.size()), maxReadBufferSize - readBuffer.size())?
 				if len == 0 then
-		            @pony_asio_event_set_readable[None](event, false)
-		            @pony_asio_event_resubscribe_read(event)
-					@ponyint_actor_yield[None](this)
-					break
+					return false
 				end
 				readBuffer.undefined(readBuffer.size() + len)
 				
@@ -243,11 +242,9 @@ actor HttpServerConnection
 						end
 					end
 				end
-				
-			else
-				close()
-				break
 			end
+		else
+			close()
 		end
 		
 		false
