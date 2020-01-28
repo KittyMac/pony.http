@@ -1,3 +1,5 @@
+use "collections"
+
 use @pony_asio_event_create[AsioEventID](owner: AsioEventNotify, fd: U32, flags: U32, nsec: U64, noisy: Bool)
 use @pony_asio_event_fd[U32](event: AsioEventID)
 use @pony_asio_event_unsubscribe[None](event: AsioEventID)
@@ -19,11 +21,15 @@ actor HTTPServer
 	
 	var connectionPool:Array[HTTPServerConnection]
 	
+	var httpServices:Map[String box,HTTPService val] val
+	
 	new create() =>
 		connectionPool = Array[HTTPServerConnection]()
+		httpServices = recover Map[String box,HTTPService val]() end
 	
 	new listen(host:String, port:String)? =>
 		connectionPool = Array[HTTPServerConnection](2048)
+		httpServices = recover Map[String box,HTTPService val]() end
 		
 		event = @pony_os_listen_tcp4[AsioEventID](this, host.cstring(), port.cstring())
 		socket = @pony_asio_event_fd(event)
@@ -63,6 +69,18 @@ actor HTTPServer
 			event = AsioEvent.none()
 		end
 	
+	be registerService(url:String val, service:HTTPService val) =>
+		let httpServicesTrn:Map[String box,HTTPService val] trn = recover Map[String box,HTTPService val]() end
+		
+		// Copy over all of the existing services
+		for (k, v) in httpServices.pairs() do
+			httpServicesTrn(k) = v
+		end
+		httpServicesTrn(url) = service
+		
+		httpServices = consume httpServicesTrn
+		
+	
 	fun ref accept() =>
 		if closed then
 			return
@@ -80,7 +98,7 @@ actor HTTPServer
 		
 		try
 			let connection = connectionPool.pop()?
-			connection.process(connectionSocket)
+			connection.process(connectionSocket, httpServices)
 		else
 			@pony_os_socket_close[None](connectionSocket)
 		end

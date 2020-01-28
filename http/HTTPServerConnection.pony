@@ -1,4 +1,7 @@
+use "collections"
+
 use @strncmp[I32](s1:Pointer[U8] tag, s2:Pointer[U8] tag, size:USize)
+use @pony_os_errno[I32]()
 
 actor HTTPServerConnection
 	"""
@@ -9,6 +12,8 @@ actor HTTPServerConnection
 	
 	var event:AsioEventID = AsioEvent.none()
 	var socket:U32 = 0
+	
+	var serviceMap:Map[String box,HTTPService val] val
 	
 	let maxReadBufferSize:USize = 5 * 1024 * 1024
 	var readBuffer:Array[U8]
@@ -28,16 +33,20 @@ actor HTTPServerConnection
 	
 	new create(server':HTTPServer) =>
 		server = server'
+		
+		serviceMap = recover Map[String box,HTTPService val]() end
 		readBuffer = Array[U8](maxReadBufferSize)
+		
 		httpCommandUrl = String(1024)
 		httpContentLength = String(1024)
 		httpContentType = String(1024)
 		httpContent = String(maxReadBufferSize)
 	
-	be process(socket':U32) =>
+	be process(socket':U32, serviceMap':Map[String box,HTTPService val] val) =>
 		socket = socket'
+		serviceMap = serviceMap'
 		
-		@fprintf[I32](@pony_os_stdout[Pointer[U8]](), "connection open %d\n".cstring(), socket)
+		//@fprintf[I32](@pony_os_stdout[Pointer[U8]](), "connection open %d\n".cstring(), socket)
 		
 		scanOffset = 0
 		scanContentLength = 0
@@ -50,6 +59,7 @@ actor HTTPServerConnection
 		httpContent.clear()
 		
 		event = @pony_asio_event_create(this, socket, AsioEvent.read_write_oneshot(), 0, true)
+		@pony_asio_event_set_writeable(event, true)
 	
 	be _event_notify(event': AsioEventID, flags: U32, arg: U32) =>
 		if event isnt event' then
@@ -61,9 +71,53 @@ actor HTTPServerConnection
 			None
 		end
 		
-		// perform our reads?
 		if AsioEvent.readable(flags) then
-			read()
+			if read() then
+				
+				// We've completely read the request, process it against the matching service
+				var service:HTTPService val = NullService
+				try
+					service = serviceMap(httpCommandUrl)?
+				else
+					try
+						service = serviceMap("*")?
+					end
+				end
+				
+				/*
+				@fprintf[I32](@pony_os_stdout[Pointer[U8]](), "=> httpCommand: %d\n".cstring(), httpCommand)
+				@fprintf[I32](@pony_os_stdout[Pointer[U8]](), "=> httpCommandUrl: %s\n".cstring(), httpCommandUrl.cstring())
+				@fprintf[I32](@pony_os_stdout[Pointer[U8]](), "=> httpContentLength: %s\n".cstring(), httpContentLength.cstring())
+				@fprintf[I32](@pony_os_stdout[Pointer[U8]](), "=> httpContentType: %s\n".cstring(), httpContentType.cstring())
+				@fprintf[I32](@pony_os_stdout[Pointer[U8]](), "=> httpContent: %s\n".cstring(), httpContent.cstring())
+				*/
+				
+				let response = service.process(httpCommandUrl, Map[String,String](), httpContent)
+				try
+				let httpHeader = String(512)
+					httpHeader.append(service.httpStatusString(response._1))
+					httpHeader.push('\r')
+					httpHeader.push('\n')
+					httpHeader.append("Content-Type: ")
+					httpHeader.append(response._2)
+					httpHeader.push('\r')
+					httpHeader.push('\n')
+					httpHeader.append("Content-Length: ")
+					httpHeader.append(response._3.size().string())
+					httpHeader.push('\r')
+					httpHeader.push('\n')
+					httpHeader.push('\r')
+					httpHeader.push('\n')
+					@pony_os_send[USize](event, httpHeader.cpointer(), httpHeader.size())?
+					@pony_os_send[USize](event, response._3.cpointer(), response._3.size())?
+				end
+				
+				//@fprintf[I32](@pony_os_stdout[Pointer[U8]](), "<= %s\n".cstring(), response._3.cstring())
+				
+				// TODO: it is not garaunteed that we can write all of the data in one go, we need
+				// to move this to a chunking writer solution
+				close()
+			end
 		end
 
 		if AsioEvent.disposable(flags) then
@@ -109,7 +163,7 @@ actor HTTPServerConnection
 			end
 		end
 	
-	fun ref read() =>
+	fun ref read():Bool =>
 		while true do
 			try
 				let len = @pony_os_recv[USize](event, readBuffer.cpointer(readBuffer.size()), maxReadBufferSize - readBuffer.size())?
@@ -157,7 +211,7 @@ actor HTTPServerConnection
 					elseif (prevScanCharA == '\r') and (prevScanCharB == '\n') and (prevScanCharC == '\r') and (c == '\n') then
 						try scanContentLength = httpContentLength.usize()? end
 						if scanContentLength == 0 then
-							break
+							return true
 						end
 						continue
 					end
@@ -174,14 +228,7 @@ actor HTTPServerConnection
 						httpContent.push(c)
 						scanContentLength = scanContentLength - 1
 						if scanContentLength == 0 then
-							// We are now completely done!
-														
-							@fprintf[I32](@pony_os_stdout[Pointer[U8]](), "httpCommand: %d\n".cstring(), httpCommand)
-							@fprintf[I32](@pony_os_stdout[Pointer[U8]](), "httpCommandUrl: %s\n".cstring(), httpCommandUrl.cstring())
-							@fprintf[I32](@pony_os_stdout[Pointer[U8]](), "httpContentLength: %s\n".cstring(), httpContentLength.cstring())
-							@fprintf[I32](@pony_os_stdout[Pointer[U8]](), "httpContentType: %s\n".cstring(), httpContentType.cstring())
-							@fprintf[I32](@pony_os_stdout[Pointer[U8]](), "httpContent: %s\n".cstring(), httpContent.cstring())
-							
+							return true
 						end
 					end
 				end
@@ -192,10 +239,16 @@ actor HTTPServerConnection
 			end
 		end
 		
+		false
+		
 	
 	be close() =>
 		
-		@fprintf[I32](@pony_os_stdout[Pointer[U8]](), "connection closed %d\n".cstring(), socket)
+		//@fprintf[I32](@pony_os_stdout[Pointer[U8]](), "connection closed %d\n".cstring(), socket)
+		
+        @pony_asio_event_unsubscribe(event)
+        @pony_asio_event_set_readable(event, false)
+        @pony_asio_event_set_writeable(event, false)
 		
 		@pony_asio_event_destroy(event)
 		@pony_os_socket_close[None](socket)

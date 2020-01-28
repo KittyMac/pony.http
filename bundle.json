@@ -1,3 +1,16 @@
 {
-  "deps": [ ]
+  "deps": [
+	  {
+	    "type": "local",
+	    "local-path": "../pony.fileExt"
+	  },
+	  {
+	    "type": "local",
+	    "local-path": "../pony.flow"
+	  },
+	  {
+	    "type": "local",
+	    "local-path": "../pony.stringext"
+	  }
+  ]
 }
