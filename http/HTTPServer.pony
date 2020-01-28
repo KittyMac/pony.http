@@ -11,31 +11,37 @@ use @pony_asio_event_set_writeable[None](event: AsioEventID, writeable: Bool)
 use @pony_asio_event_set_readable[None](event: AsioEventID, readable: Bool)
 use @ponyint_actor_num_messages[USize](anyActor:Any tag)
 
-actor HTTPServer
+actor HttpServer
 	"""
-	Listens for initial connections, then passes the connection on to a pool of HTTPServerConnections
+	Listens for initial connections, then passes the connection on to a pool of HttpServerConnections
 	"""
 	var event:AsioEventID = AsioEvent.none()
 	var closed:Bool = true
 	var socket: U32 = 0
 	
-	var connectionPool:Array[HTTPServerConnection]
+	var connectionPool:Array[HttpServerConnection]
+	var totalConnections:USize = 0
 	
 	var httpServices:Map[String box,HTTPService val] val
 	
+	
+	fun _tag():USize => 1
+	fun _batch():USize => 5_000
+	fun _priority():USize => -1
+	
 	new create() =>
-		connectionPool = Array[HTTPServerConnection]()
+		connectionPool = Array[HttpServerConnection]()
 		httpServices = recover Map[String box,HTTPService val]() end
 	
 	new listen(host:String, port:String)? =>
-		connectionPool = Array[HTTPServerConnection](2048)
+		connectionPool = Array[HttpServerConnection](2048)
 		httpServices = recover Map[String box,HTTPService val]() end
 		
 		event = @pony_os_listen_tcp4[AsioEventID](this, host.cstring(), port.cstring())
 		socket = @pony_asio_event_fd(event)
 
 		if socket < 0 then
-			@pony_asio_event_destroy(event)
+			@pony_asio_event_unsubscribe(event)
 			event = AsioEvent.none()
 			error
 		end
@@ -52,22 +58,40 @@ actor HTTPServer
 		if not event.is_null() then
 			@pony_asio_event_unsubscribe(event)
 			@pony_os_socket_close[None](socket)
+			event = AsioEvent.none()
 			socket = -1
 		end
 	
 	be _event_notify(event': AsioEventID, flags: U32, arg: U32) =>
-		if event isnt event' then
+		//@fprintf[I32](@pony_os_stdout[Pointer[U8]](), "server event %d == %d\n".cstring(), event', event)
+		if AsioEvent.disposable(flags) then
+			@pony_asio_event_destroy(event')
 			return
 		end
-
-		if AsioEvent.readable(flags) then
-			accept()
+		
+		if event is event' then
+			if AsioEvent.readable(flags) then
+				
+				// accept new connections and hand them to free (or new) connection processors
+				while true do
+					var connectionSocket = @pony_os_accept[U32](event)
+					if connectionSocket == -1 then
+						continue
+					elseif connectionSocket == 0 then
+						return
+					end
+			
+					if connectionPool.is_empty() then
+						HttpServerConnection(this).process(connectionSocket, httpServices)
+					else
+						try connectionPool.pop()?.process(connectionSocket, httpServices) end
+					end
+				end
+				
+			end
 		end
 
-		if AsioEvent.disposable(flags) then
-			@pony_asio_event_destroy(event)
-			event = AsioEvent.none()
-		end
+		
 	
 	be registerService(url:String val, service:HTTPService val) =>
 		let httpServicesTrn:Map[String box,HTTPService val] trn = recover Map[String box,HTTPService val]() end
@@ -78,30 +102,8 @@ actor HTTPServer
 		end
 		httpServicesTrn(url) = service
 		
-		httpServices = consume httpServicesTrn
+		httpServices = consume httpServicesTrn		
 		
-	
-	fun ref accept() =>
-		if closed then
-			return
-		end
-
-		var connectionSocket = @pony_os_accept[U32](event)
-		if connectionSocket > 0 then
-			spawn(connectionSocket)
-		end
-	
-	fun ref spawn(connectionSocket: U32) =>
-		if connectionPool.is_empty() then
-			connectionPool.push(HTTPServerConnection(this))
-		end
 		
-		try
-			let connection = connectionPool.pop()?
-			connection.process(connectionSocket, httpServices)
-		else
-			@pony_os_socket_close[None](connectionSocket)
-		end
-	
-	be connectionFinished(connection:HTTPServerConnection) =>
+	be connectionFinished(connection:HttpServerConnection) =>
 		connectionPool.push(connection)
