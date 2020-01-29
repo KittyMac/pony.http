@@ -4,7 +4,7 @@ use "fileext"
 use "stringext"
 
 primitive HelloWorldService is HttpService
-	fun process(url:String box, params:Map[String,String] box, content:String box):(U32,String,String) =>
+	fun process(url:String box, params:Map[String,String] box, content:String box):(U32,String,HttpContentResponse) =>
 		(200, "text/plain", "Hello World")
 
 actor Main
@@ -12,7 +12,7 @@ actor Main
 		try
 			let server = HttpServer.listen("0.0.0.0", "8080")?
 			server.registerService("/hello/world", HelloWorldService)
-			server.registerService("*", HttpFileService("./public_html/"))
+			server.registerService("*", HttpFileService.default())
 		end
 
  	fun @runtime_override_defaults(rto: RuntimeOptions) =>

@@ -30,7 +30,8 @@ actor HttpServerConnection
 	var httpContent:String ref
 	
 	let maxHttpResponse:USize = 5 * 1024 * 1024
-	let httpResponse:String ref
+	let httpResponse:Array[U8] ref
+	var httpResponseWriteOffset:USize = 0
 	
 	fun _tag():USize => 2
 	fun _batch():USize => 5_000
@@ -46,7 +47,7 @@ actor HttpServerConnection
 		httpContentLength = String(1024)
 		httpContentType = String(1024)
 		httpContent = String(maxReadBufferSize)
-		httpResponse = String(maxHttpResponse)
+		httpResponse = Array[U8](maxHttpResponse)
 		
 	be process(socket':U32, serviceMap':Map[String box,HttpService val] val) =>
 		socket = socket'
@@ -68,6 +69,24 @@ actor HttpServerConnection
 		event = @pony_asio_event_create(this, socket, AsioEvent.read_write_oneshot(), 0, true)
 		@pony_asio_event_set_writeable(event, true)
 	
+	fun ref handleResponseWrites() =>
+		try
+			while httpResponseWriteOffset < httpResponse.size() do
+				let n = @pony_os_send[USize](event, httpResponse.cpointer(httpResponseWriteOffset), httpResponse.size() - httpResponseWriteOffset)?
+				if n == 0 then
+			        @pony_asio_event_set_writeable(event, false)
+			        @pony_asio_event_resubscribe_write(event)
+					@ponyint_actor_yield[None](this)
+					return
+				end
+				httpResponseWriteOffset = httpResponseWriteOffset + n
+			end
+			resetWriteForNextResponse()
+		else
+			httpResponseWriteOffset = 0
+			httpResponse.clear()
+		end
+	
 	be _event_notify(event': AsioEventID, flags: U32, arg: U32) =>
 		//@fprintf[I32](@pony_os_stdout[Pointer[U8]](), "connection event %d == %d (disposable: %d)\n".cstring(), event', event, AsioEvent.disposable(flags))
 		if AsioEvent.disposable(flags) then
@@ -78,7 +97,7 @@ actor HttpServerConnection
 		if event is event' then
 			// perform our writes?
 			if AsioEvent.writeable(flags) then
-				None
+				handleResponseWrites()
 			end
 		
 			if AsioEvent.readable(flags) then
@@ -95,26 +114,31 @@ actor HttpServerConnection
 					end
 					
 					let response = service.process(httpCommandUrl, Map[String,String](), httpContent)
-					try
-						httpResponse.clear()
-						httpResponse.append(service.httpStatusString(response._1))
-						httpResponse.push('\r')
-						httpResponse.push('\n')
-						httpResponse.append("Content-Type: ")
-						httpResponse.append(response._2)
-						httpResponse.push('\r')
-						httpResponse.push('\n')
-						httpResponse.append("Content-Length: ")
-						httpResponse.append(response._3.size().string())
-						httpResponse.push('\r')
-						httpResponse.push('\n')
-						httpResponse.push('\r')
-						httpResponse.push('\n')
-						httpResponse.append(response._3)
-						@pony_os_send[USize](event, httpResponse.cpointer(), httpResponse.size())?
+					
+					var responseContent = response._3
+					if response._1 != 200 then
+						responseContent = service.httpStatusHtmlString(response._1)
 					end
 					
-					resetWriteForNextResponse()
+					httpResponse.clear()
+					httpResponse.append(service.httpStatusString(response._1))
+					httpResponse.push('\r')
+					httpResponse.push('\n')
+					httpResponse.append("Content-Type: ")
+					httpResponse.append(response._2)
+					httpResponse.push('\r')
+					httpResponse.push('\n')
+					httpResponse.append("Content-Length: ")
+					httpResponse.append(responseContent.size().string())
+					httpResponse.push('\r')
+					httpResponse.push('\n')
+					httpResponse.push('\r')
+					httpResponse.push('\n')
+					httpResponse.append(responseContent)
+					
+					handleResponseWrites()
+					
+					
 				end
 				
 				// If we get here and we're still active, we need to reschedule ourselves for more data
@@ -167,6 +191,7 @@ actor HttpServerConnection
 	
 	
 	fun ref resetWriteForNextResponse() =>
+		httpResponseWriteOffset = 0
 		httpCommand = HTTPCommand.none()
 		httpCommandUrl.clear()
 		httpContentLength.clear()

@@ -1,11 +1,14 @@
 use "collections"
 
+type HttpContentResponse is (String|Array[U8])
+
+
 trait HttpService
 	"""
 	A service receives the parsed content of an HttpServerConnection, processes it, and returns the
 	payload to be returned to the client. HTTP services are inherently stateless, use HTTP[TBD]
 	"""
-	fun process(url:String box, params:Map[String,String] box, content:String box):(U32,String,String) =>
+	fun process(url:String box, params:Map[String,String] box, content:String box):(U32,String,HttpContentResponse) =>
 		(500, "text/plain", "Service Unavailable")
 	
 	fun httpStatusString(code:U32):String =>
@@ -13,6 +16,11 @@ trait HttpService
 		| 200 => "HTTP/1.1 200 OK"
 		| 404 => "HTTP/1.1 404 Not Found"
 		else "HTTP/1.1 500 Internal Server Error" end
+	
+	fun httpStatusHtmlString(code:U32):String =>
+		match code
+		| 404 => "<HTML><HEAD><TITLE>Not Found</TITLE></HEAD><BODY><H2>404 Not Found</H2>The requested file could not be found.<P></BODY></HTML>"
+		else "<HTML><HEAD><TITLE>Internal Server Error</TITLE></HEAD><BODY><H2>500 Internal Server Error</H2>An error occurred while attempting to process your request.<P></BODY></HTML>" end
 	
 	fun httpContentTypeForExtension(extension:String):String =>
 		match extension
@@ -88,7 +96,7 @@ trait HttpService
 		| ".3gp" => "video/3gpp"
 		| ".3g2" => "video/3gpp2"
 		| ".7z" => "application/x-7z-compressed"
-	else "text/html" end
+	else "application/octet-stream" end
 
 
 primitive NullService is HttpService
