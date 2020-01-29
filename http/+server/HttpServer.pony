@@ -22,7 +22,7 @@ actor HttpServer
 	var connectionPool:Array[HttpServerConnection]
 	var totalConnections:USize = 0
 	
-	var httpServices:Map[String box,HTTPService val] val
+	var httpServices:Map[String box,HttpService val] val
 	
 	
 	fun _tag():USize => 1
@@ -31,11 +31,11 @@ actor HttpServer
 	
 	new create() =>
 		connectionPool = Array[HttpServerConnection]()
-		httpServices = recover Map[String box,HTTPService val]() end
+		httpServices = recover Map[String box,HttpService val]() end
 	
 	new listen(host:String, port:String)? =>
 		connectionPool = Array[HttpServerConnection](2048)
-		httpServices = recover Map[String box,HTTPService val]() end
+		httpServices = recover Map[String box,HttpService val]() end
 		
 		event = @pony_os_listen_tcp4[AsioEventID](this, host.cstring(), port.cstring())
 		socket = @pony_asio_event_fd(event)
@@ -93,8 +93,8 @@ actor HttpServer
 
 		
 	
-	be registerService(url:String val, service:HTTPService val) =>
-		let httpServicesTrn:Map[String box,HTTPService val] trn = recover Map[String box,HTTPService val]() end
+	be registerService(url:String val, service:HttpService val) =>
+		let httpServicesTrn:Map[String box,HttpService val] trn = recover Map[String box,HttpService val]() end
 		
 		// Copy over all of the existing services
 		for (k, v) in httpServices.pairs() do

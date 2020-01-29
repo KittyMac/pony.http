@@ -3,30 +3,7 @@ use "collections"
 use "fileext"
 use "stringext"
 
-primitive SimpleFileService is HTTPService
-	fun process(url:String box, params:Map[String,String] box, content:String box):(U32,String,String) =>
-		try
-			// 1. construct the path to the local file
-			var fileURL:String val = "./public_html/" + url
-			if StringExt.endswith(fileURL, "/") then
-				fileURL = fileURL + "index.html"
-			end
-			
-			// 2. determine the content-type from the extension
-			let extension = StringExt.pathExtension(fileURL)
-			let contentType = httpContentTypeForExtension(extension)
-			
-			// 3. load file contents
-			let responseContent = recover val FileExt.fileToString(fileURL)? end
-			
-			// 4. return results
-			return (200, contentType, responseContent)
-		else
-			return (404, "text/html; charset=UTF-8", "")
-		end
-
-
-primitive HelloWorldService is HTTPService
+primitive HelloWorldService is HttpService
 	fun process(url:String box, params:Map[String,String] box, content:String box):(U32,String,String) =>
 		(200, "text/plain", "Hello World")
 
@@ -35,7 +12,7 @@ actor Main
 		try
 			let server = HttpServer.listen("0.0.0.0", "8080")?
 			server.registerService("/hello/world", HelloWorldService)
-			server.registerService("*", SimpleFileService)
+			server.registerService("*", HttpFileService("./public_html/"))
 		end
 
  	fun @runtime_override_defaults(rto: RuntimeOptions) =>
@@ -55,9 +32,10 @@ actor Main is TestList
 		test(_Test1)
 	
  	fun @runtime_override_defaults(rto: RuntimeOptions) =>
-		rto.ponyanalysis = true
+		rto.ponyanalysis = false
 		rto.ponynoscale = true
 		rto.ponynoblock = true
+		rto.ponynoyield = true
 		rto.ponygcinitial = 0
 		rto.ponygcfactor = 1.0
 

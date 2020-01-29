@@ -1,6 +1,6 @@
 use "collections"
 
-trait HTTPService
+trait HttpService
 	"""
 	A service receives the parsed content of an HttpServerConnection, processes it, and returns the
 	payload to be returned to the client. HTTP services are inherently stateless, use HTTP[TBD]
@@ -91,5 +91,5 @@ trait HTTPService
 	else "text/html" end
 
 
-primitive NullService is HTTPService
+primitive NullService is HttpService
 		

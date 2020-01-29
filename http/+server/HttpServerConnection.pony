@@ -13,7 +13,7 @@ actor HttpServerConnection
 	var event:AsioEventID = AsioEvent.none()
 	var socket:U32 = 0
 	
-	var serviceMap:Map[String box,HTTPService val] val
+	var serviceMap:Map[String box,HttpService val] val
 	
 	let maxReadBufferSize:USize = 5 * 1024 * 1024
 	var readBuffer:Array[U8]
@@ -39,7 +39,7 @@ actor HttpServerConnection
 	new create(server':HttpServer) =>
 		server = server'
 		
-		serviceMap = recover Map[String box,HTTPService val]() end
+		serviceMap = recover Map[String box,HttpService val]() end
 		readBuffer = Array[U8](maxReadBufferSize)
 		
 		httpCommandUrl = String(1024)
@@ -48,7 +48,7 @@ actor HttpServerConnection
 		httpContent = String(maxReadBufferSize)
 		httpResponse = String(maxHttpResponse)
 		
-	be process(socket':U32, serviceMap':Map[String box,HTTPService val] val) =>
+	be process(socket':U32, serviceMap':Map[String box,HttpService val] val) =>
 		socket = socket'
 		serviceMap = serviceMap'
 		
@@ -85,7 +85,7 @@ actor HttpServerConnection
 				if read() then
 				
 					// We've completely read the request, process it against the matching service
-					var service:HTTPService val = NullService
+					var service:HttpService val = NullService
 					try
 						service = serviceMap(httpCommandUrl)?
 					else
