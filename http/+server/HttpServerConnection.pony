@@ -1,4 +1,5 @@
 use "collections"
+use "fileext"
 
 use @strncmp[I32](s1:Pointer[U8] tag, s2:Pointer[U8] tag, size:USize)
 use @pony_os_errno[I32]()
@@ -15,7 +16,7 @@ actor HttpServerConnection
 	
 	var serviceMap:Map[String box,HttpService val] val
 	
-	let maxReadBufferSize:USize = 5 * 1024 * 1024
+	let maxReadBufferSize:USize = 4 * 1024 * 1024
 	var readBuffer:Array[U8]
 	var scanOffset:USize = 0
 	var scanContentLength:USize = 0
@@ -33,6 +34,9 @@ actor HttpServerConnection
 	let httpResponse:Array[U8] ref
 	var httpResponseWriteOffset:USize = 0
 	
+	var fileReadFD:I32
+	var fileReadBuffer:Array[U8]
+	
 	fun _tag():USize => 2
 	fun _batch():USize => 5_000
 	fun _priority():USize => 1
@@ -42,6 +46,8 @@ actor HttpServerConnection
 		
 		serviceMap = recover Map[String box,HttpService val]() end
 		readBuffer = Array[U8](maxReadBufferSize)
+		fileReadBuffer = Array[U8](maxReadBufferSize)
+		fileReadFD = 0
 		
 		httpCommandUrl = String(1024)
 		httpContentLength = String(1024)
@@ -71,7 +77,7 @@ actor HttpServerConnection
 	
 	fun ref handleResponseWrites() =>
 		try
-			while httpResponseWriteOffset < httpResponse.size() do
+			while (httpResponseWriteOffset < httpResponse.size()) or readNextChunkOfResponseContent() do
 				let n = @pony_os_send[USize](event, httpResponse.cpointer(httpResponseWriteOffset), httpResponse.size() - httpResponseWriteOffset)?
 				if n == 0 then
 			        @pony_asio_event_set_writeable(event, false)
@@ -86,6 +92,30 @@ actor HttpServerConnection
 			httpResponseWriteOffset = 0
 			httpResponse.clear()
 		end
+	
+	fun ref readNextChunkOfResponseContent():Bool =>
+		if fileReadFD <= 0 then
+			return false
+		end
+		
+		if httpResponseWriteOffset >= httpResponse.size() then
+			httpResponse.clear()
+			httpResponseWriteOffset = 0
+		end
+		
+		let n = FileExt.read(fileReadFD, fileReadBuffer.cpointer(), maxReadBufferSize)
+		if n <= 0 then
+			FileExt.close(fileReadFD)
+			fileReadFD = 0
+			return false
+		end
+		
+		fileReadBuffer.undefined(n.usize())
+		httpResponse.append(fileReadBuffer)
+		fileReadBuffer.clear()
+		
+		true
+		
 	
 	be _event_notify(event': AsioEventID, flags: U32, arg: U32) =>
 		//@fprintf[I32](@pony_os_stdout[Pointer[U8]](), "connection event %d == %d (disposable: %d)\n".cstring(), event', event, AsioEvent.disposable(flags))
@@ -129,16 +159,33 @@ actor HttpServerConnection
 					httpResponse.push('\r')
 					httpResponse.push('\n')
 					httpResponse.append("Content-Length: ")
-					httpResponse.append(responseContent.size().string())
+					
+					match responseContent
+					| let fd:I32 =>
+						httpResponse.append(FileExt.size(fd).string())
+					| let string:String =>
+						httpResponse.append(string.size().string())
+					| let array:Array[U8] =>
+						httpResponse.append(array.size().string())
+					end
+					
 					httpResponse.push('\r')
 					httpResponse.push('\n')
 					httpResponse.push('\r')
 					httpResponse.push('\n')
-					httpResponse.append(responseContent)
+					
+					match responseContent
+					| let fd:I32 =>
+						fileReadFD = fd
+						readNextChunkOfResponseContent()
+					| let string:String =>
+						httpResponse.append(string)
+					| let array:Array[U8] =>
+						httpResponse.append(array)
+					end
 					
 					handleResponseWrites()
-					
-					
+
 				end
 				
 				// If we get here and we're still active, we need to reschedule ourselves for more data

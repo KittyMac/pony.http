@@ -1,6 +1,7 @@
 use "collections"
 
-type HttpContentResponse is (String|Array[U8])
+// an array, a string, to a file descriptor
+type HttpContentResponse is (String|Array[U8]|I32)
 
 
 trait HttpService
