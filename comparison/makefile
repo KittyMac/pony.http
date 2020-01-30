@@ -5,3 +5,5 @@ crystal:
 node:
 	node node_server.js
 
+rust:
+	cd hyper_server; cargo run --release

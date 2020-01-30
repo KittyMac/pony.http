@@ -4,6 +4,14 @@
 
 To provide a barebones http-like server for Pony. Note that this is and insanely early and specialized implmentation and you should avoid using the code in the repository!
 
+### TODO
+
+- [ ] Client connect to server code
+
+- [ ] Fail on http requests which exceed a maximum size
+- [ ] Support SSL
+- [ ] Support compression
+
 ## License
 
 pony.http is free software distributed under the terms of the MIT license, reproduced below. pony.http may be used for any purpose, including commercial purposes, at absolutely no cost. No paperwork, no royalties, no GNU-like "copyleft" restrictions. Just download and enjoy.
