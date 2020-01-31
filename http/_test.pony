@@ -7,23 +7,6 @@ primitive HelloWorldService is HttpService
 	fun process(url:String box, params:Map[String,String] box, content:String box):(U32,String,HttpContentResponse) =>
 		(200, "text/plain", "Hello World")
 
-actor Main
-	new create(env: Env) =>
-		try
-			let server = HttpServer.listen("0.0.0.0", "8080")?
-			server.registerService("/hello/world", HelloWorldService)
-			server.registerService("*", HttpFileService.default())
-		end
-
- 	fun @runtime_override_defaults(rto: RuntimeOptions) =>
-		rto.ponyanalysis = false
-		rto.ponynoscale = true
-		rto.ponynoblock = true
-		rto.ponynoyield = true
-		rto.ponygcinitial = 0
-		rto.ponygcfactor = 1.0
-
-		/*
 actor Main is TestList
 	new create(env: Env) => PonyTest(env, this)
 	new make() => None
@@ -39,21 +22,37 @@ actor Main is TestList
 		rto.ponygcinitial = 0
 		rto.ponygcfactor = 1.0
 
-class iso _Test1 is UnitTest
-	fun name(): String => "test 1 - in memory db"
 
-	fun apply(h: TestHelper) =>
+
+
+
+
+actor _Test1Actor
+	let h: TestHelper
+	new create(h': TestHelper)? =>
+		h = h'
+		
+		let server = HttpServer.listen("0.0.0.0", "8080")?
+		server.registerService("/hello/world", HelloWorldService)
+		server.registerService("*", HttpFileService.default())
+	
+		let client = HttpClient.connect("127.0.0.1", "8080")?
+		client.httpGet(this, "/index.html")
+	
+	be httpResponse(headers:Array[U8] val, content:Array[U8] val) =>
 		try
-			h.long_test(30_000_000_000)
-			
-			let server = HttpServer.listen("0.0.0.0", "8080")?
-			server.registerService("/hello/world", HelloWorldService)
-			server.registerService("*", SimpleFileService)
-			
-			
-			h.complete(true)
+			h.complete(FileExt.fileToString("./public_html/index.html")? == String.from_array(content))
 		else
 			h.complete(false)
 		end
 
-*/
+class iso _Test1 is UnitTest
+	fun name(): String => "test 1 - request and compare index.html"
+
+	fun apply(h: TestHelper) =>
+		try
+			h.long_test(30_000_000_000)
+			_Test1Actor(h)?
+		else
+			h.complete(false)
+		end

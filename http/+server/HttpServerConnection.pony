@@ -274,38 +274,42 @@ actor HttpServerConnection
 				//   Content-Length: 26
 				//   
 				//   {"id":9,"name":"baeldung"}
-				for c in readBuffer.valuesAfter(scanOffset) do					
-					if 	(prevScanCharA == 'O') and (prevScanCharB == 'S') and (c == 'T') and matchScan("POST") then
-						httpCommand = HTTPCommand.post()
-						scanURL(scanOffset-3, httpCommandUrl)
-					elseif (prevScanCharA == 'U') and (prevScanCharB == 'T') and (c == ' ') and matchScan("PUT ") then
-						httpCommand = HTTPCommand.put()
-						scanURL(scanOffset-3, httpCommandUrl)
-					elseif (prevScanCharA == 'E') and (prevScanCharB == 'T') and (c == ' ') and matchScan("GET ") then
-						httpCommand = HTTPCommand.get()
-						scanURL(scanOffset-3, httpCommandUrl)
-					elseif (prevScanCharA == 'E') and (prevScanCharB == 'T') and (c == 'E') and matchScan("DELETE") then
-						httpCommand = HTTPCommand.delete()
-						scanURL(scanOffset-5, httpCommandUrl)
-					elseif (prevScanCharA == 't') and (prevScanCharB == 'h') and (c == ':') and matchScan("Content-Length:") then
-						scanHeader(scanOffset-5, httpContentLength)
-					elseif (prevScanCharA == 'p') and (prevScanCharB == 'e') and (c == ':') and matchScan("Content-Type:") then
-						scanHeader(scanOffset-5, httpContentType)
-					elseif (prevScanCharA == '\n') and (prevScanCharB == '\r') and (c == '\n') then
-						try scanContentLength = httpContentLength.usize()? end
-						if scanContentLength == 0 then
-							resetReadForNextRequest()
-							return true
-						end
-						continue
-					end
+				for c in readBuffer.valuesAfter(scanOffset) do
+					//@fprintf[I32](@pony_os_stdout[Pointer[U8]](), "%c".cstring(), c)
 					
 					if scanContentLength == 0 then
+						// we're still in the http request
+						if 	(prevScanCharA == 'O') and (prevScanCharB == 'S') and (c == 'T') and matchScan("POST") then
+							httpCommand = HTTPCommand.post()
+							scanURL(scanOffset-3, httpCommandUrl)
+						elseif (prevScanCharA == 'U') and (prevScanCharB == 'T') and (c == ' ') and matchScan("PUT ") then
+							httpCommand = HTTPCommand.put()
+							scanURL(scanOffset-3, httpCommandUrl)
+						elseif (prevScanCharA == 'E') and (prevScanCharB == 'T') and (c == ' ') and matchScan("GET ") then
+							httpCommand = HTTPCommand.get()
+							scanURL(scanOffset-3, httpCommandUrl)
+						elseif (prevScanCharA == 'E') and (prevScanCharB == 'T') and (c == 'E') and matchScan("DELETE") then
+							httpCommand = HTTPCommand.delete()
+							scanURL(scanOffset-5, httpCommandUrl)
+						elseif (prevScanCharA == 't') and (prevScanCharB == 'h') and (c == ':') and matchScan("Content-Length:") then
+							scanHeader(scanOffset-5, httpContentLength)
+							try scanContentLength = httpContentLength.usize()? end
+						elseif (prevScanCharA == 'p') and (prevScanCharB == 'e') and (c == ':') and matchScan("Content-Type:") then
+							scanHeader(scanOffset-5, httpContentType)
+						elseif (prevScanCharA == '\n') and (prevScanCharB == '\r') and (c == '\n') then
+							if scanContentLength == 0 then
+								resetReadForNextRequest()
+								return true
+							end
+							continue
+						end
+						
 						prevScanCharA = prevScanCharB
 						prevScanCharB = c
 					
 						scanOffset = scanOffset + 1
 					else
+						// we're past the request and just getting the contents
 						httpContent.push(c)
 						scanContentLength = scanContentLength - 1
 						if scanContentLength == 0 then
@@ -314,6 +318,12 @@ actor HttpServerConnection
 						end
 					end
 				end
+				
+				if scanContentLength > 0 then
+					scanOffset = 0
+					readBuffer.clear()
+				end
+				
 			end
 		else
 			close()
