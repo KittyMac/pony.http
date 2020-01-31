@@ -9,7 +9,7 @@ trait HttpService
 	A service receives the parsed content of an HttpServerConnection, processes it, and returns the
 	payload to be returned to the client. HTTP services are inherently stateless, use HTTP[TBD]
 	"""
-	fun process(url:String box, params:Map[String,String] box, content:String box):(U32,String,HttpContentResponse) =>
+	fun process(url:String val, content:Array[U8] val):(U32,String,HttpContentResponse) =>
 		(500, "text/plain", "Service Unavailable")
 	
 	fun httpStatusString(code:U32):String =>

@@ -68,8 +68,17 @@ actor HttpClient
 		end
 		
 		
-	be httpGet(notify:HttpRequestNotify, urlPath:String) =>
-		let request = HttpRequest(notify, StringExt.format("GET %s HTTP/1.1\r\nUser-Agent: Pony/0.1\r\n\r\n", urlPath))
+	be httpGet(urlPath:String, callback:HttpRequestCallback val) =>
+		let request = HttpRequest(StringExt.format("GET %s HTTP/1.1\r\nUser-Agent: Pony/0.1\r\n\r\n", urlPath), callback)
+		pendingRequestWrites.push(request)
+	
+	be httpPost(urlPath:String, content:String, callback:HttpRequestCallback val) =>
+		let postString = StringExt.format("POST %s HTTP/1.1\r\nUser-Agent: Pony/0.1\r\nContent-Type: application/json\r\nContent-Length: %s\r\n\r\n%s", urlPath, content.size(), content)
+		let request = HttpRequest(postString, callback)
+		pendingRequestWrites.push(request)
+	
+	be httpPut(urlPath:String, content:String, callback:HttpRequestCallback val) =>
+		let request = HttpRequest(StringExt.format("PUT %s HTTP/1.1\r\nUser-Agent: Pony/0.1\r\n\r\n%s", urlPath, content), callback)
 		pendingRequestWrites.push(request)
 		
 	fun ref close() =>

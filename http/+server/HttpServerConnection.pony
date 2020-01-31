@@ -4,6 +4,11 @@ use "fileext"
 use @strncmp[I32](s1:Pointer[U8] tag, s2:Pointer[U8] tag, size:USize)
 use @pony_os_errno[I32]()
 
+primitive HttpServerConnectionState
+	fun header():U32 => 0
+	fun content():U32 => 1
+	fun finished():U32 => 2
+
 actor HttpServerConnection
 	"""
 	Handles a single HTTP server connection.  Read buffer has a single max size to it, if we read more than that we
@@ -13,6 +18,8 @@ actor HttpServerConnection
 	
 	var event:AsioEventID = AsioEvent.none()
 	var socket:U32 = 0
+	
+	var state:U32 = HttpServerConnectionState.header()
 	
 	var serviceMap:Map[String box,HttpService val] val
 	
@@ -25,10 +32,10 @@ actor HttpServerConnection
 	var prevScanCharB:U8 = 0
 	
 	var httpCommand:U32 = HTTPCommand.none()
-	var httpCommandUrl:String ref
-	var httpContentLength:String ref
-	var httpContentType:String ref
-	var httpContent:String ref
+	var httpCommandUrl:String trn
+	var httpContentLength:String trn
+	var httpContentType:String trn
+	var httpContent:Array[U8] trn
 	
 	let maxHttpResponse:USize = 5 * 1024 * 1024
 	let httpResponse:Array[U8] ref
@@ -49,10 +56,10 @@ actor HttpServerConnection
 		fileReadBuffer = Array[U8](maxReadBufferSize)
 		fileReadFD = 0
 		
-		httpCommandUrl = String(1024)
-		httpContentLength = String(1024)
-		httpContentType = String(1024)
-		httpContent = String(maxReadBufferSize)
+		httpCommandUrl = recover trn String(1024) end
+		httpContentLength = recover trn String(1024) end
+		httpContentType = recover trn String(1024) end
+		httpContent = recover trn Array[U8](maxReadBufferSize) end
 		httpResponse = Array[U8](maxHttpResponse)
 		
 	be process(socket':U32, serviceMap':Map[String box,HttpService val] val) =>
@@ -87,6 +94,7 @@ actor HttpServerConnection
 				end
 				httpResponseWriteOffset = httpResponseWriteOffset + n
 			end
+			
 			resetWriteForNextResponse()
 		else
 			httpResponseWriteOffset = 0
@@ -117,6 +125,13 @@ actor HttpServerConnection
 		true
 		
 	
+	fun ref consumeFieldArray(fieldVal:Array[U8] val):(Array[U8] trn^, Array[U8] val) =>
+		(recover trn Array[U8] end, fieldVal)
+	
+	fun ref consumeFieldString(fieldVal:String val):(String trn^, String val) =>
+		(recover trn String end, fieldVal)
+
+	
 	be _event_notify(event': AsioEventID, flags: U32, arg: U32) =>
 		//@fprintf[I32](@pony_os_stdout[Pointer[U8]](), "connection event %d == %d (disposable: %d)\n".cstring(), event', event, AsioEvent.disposable(flags))
 		if AsioEvent.disposable(flags) then
@@ -143,8 +158,11 @@ actor HttpServerConnection
 						end
 					end
 					
-					let response = service.process(httpCommandUrl, Map[String,String](), httpContent)
+					(httpCommandUrl, let httpCommandUrlVal) = consumeFieldString(consume httpCommandUrl)
+					(httpContent, let httpContentVal) = consumeFieldArray(consume httpContent)
 					
+					let response = service.process(httpCommandUrlVal, httpContentVal)
+										
 					var responseContent = response._3
 					if response._1 != 200 then
 						responseContent = service.httpStatusHtmlString(response._1)
@@ -200,14 +218,14 @@ actor HttpServerConnection
 	fun ref matchScan(string:String):Bool =>
 		(@strncmp(readBuffer.cpointer((scanOffset-string.size())+1), string.cstring(), string.size()) == 0)
 	
-	fun ref scanURL(offset:USize, string:String ref) =>
+	fun ref scanURL(offset:USize, string:String trn):String trn^ =>
 		var spaceCount:USize = 0
 		string.clear()
 		for c in readBuffer.valuesAfter(offset) do
 			if (c == ' ') or (c == '\n') or (c == '\r') then
 				spaceCount = spaceCount + 1
 				if spaceCount == 2 then
-					return
+					return consume string
 				end
 				continue
 			end
@@ -215,8 +233,9 @@ actor HttpServerConnection
 				string.push(c)
 			end
 		end
+		consume string
 
-	fun ref scanHeader(offset:USize, string:String ref) =>
+	fun ref scanHeader(offset:USize, string:String trn):String trn^ =>
 		var separatorCount:USize = 0
 		string.clear()
 		for c in readBuffer.valuesAfter(offset) do
@@ -228,13 +247,14 @@ actor HttpServerConnection
 			end
 			if (separatorCount == 1) then
 				if (c == '\n') or (c == '\r') then
-					return
+					return consume string
 				end
 			end
 			if (c != ' ') and (separatorCount == 1) then
 				string.push(c)
 			end
 		end
+		consume string
 	
 	
 	fun ref resetWriteForNextResponse() =>
@@ -244,6 +264,8 @@ actor HttpServerConnection
 		httpContentLength.clear()
 		httpContentType.clear()
 		httpContent.clear()
+		
+		httpResponse.clear()
 	
 	fun ref resetReadForNextRequest() =>
 		scanOffset = 0
@@ -254,76 +276,90 @@ actor HttpServerConnection
 		try
 			while true do
 			
-				let len = @pony_os_recv[USize](event, readBuffer.cpointer(readBuffer.size()), maxReadBufferSize - readBuffer.size())?
-				if len == 0 then
-					return false
-				end
-				readBuffer.undefined(readBuffer.size() + len)
-				
-				// Process the HTTP header as it arrives.  We're looking for several key this:
-				// POST/PUT/GET/DELETE requests and the URL associated with them
-				// Content-Length field, so we know how many bytes to read after then end of the header
-				// 2x CRLF to signify the end of the HTTP header
-				//
-				// Example:
-				//   POST /test.html HTTP/1.1
-				//   Host: 127.0.0.1:8080
-				//   User-Agent: curl/7.54.0
-				//   Accept: */*
-				//   Content-Type: application/json
-				//   Content-Length: 26
-				//   
-				//   {"id":9,"name":"baeldung"}
-				for c in readBuffer.valuesAfter(scanOffset) do
-					//@fprintf[I32](@pony_os_stdout[Pointer[U8]](), "%c".cstring(), c)
+				match state
+				| HttpServerConnectionState.header() =>
+					// Process the HTTP header as it arrives.  We're looking for several key this:
+					// POST/PUT/GET/DELETE requests and the URL associated with them
+					// Content-Length field, so we know how many bytes to read after then end of the header
+					// 2x CRLF to signify the end of the HTTP header
+					//
+					// Example:
+					//   POST /test.html HTTP/1.1
+					//   Host: 127.0.0.1:8080
+					//   User-Agent: curl/7.54.0
+					//   Accept: */*
+					//   Content-Type: application/json
+					//   Content-Length: 26
+					//   
+					//   {"id":9,"name":"baeldung"}
 					
-					if scanContentLength == 0 then
-						// we're still in the http request
+					let len = @pony_os_recv[USize](event, readBuffer.cpointer(readBuffer.size()), maxReadBufferSize - readBuffer.size())?
+					if len == 0 then
+						return false
+					end
+					readBuffer.undefined(readBuffer.size() + len)
+					
+					for c in readBuffer.valuesAfter(scanOffset) do
+						//@fprintf[I32](@pony_os_stdout[Pointer[U8]](), "%c".cstring(), c)
+						if state == HttpRequestState.content() then
+							httpContent.push(c)
+							continue
+						end
+
 						if 	(prevScanCharA == 'O') and (prevScanCharB == 'S') and (c == 'T') and matchScan("POST") then
 							httpCommand = HTTPCommand.post()
-							scanURL(scanOffset-3, httpCommandUrl)
+							httpCommandUrl = scanURL(scanOffset-3, consume httpCommandUrl)
 						elseif (prevScanCharA == 'U') and (prevScanCharB == 'T') and (c == ' ') and matchScan("PUT ") then
 							httpCommand = HTTPCommand.put()
-							scanURL(scanOffset-3, httpCommandUrl)
+							httpCommandUrl = scanURL(scanOffset-3, consume httpCommandUrl)
 						elseif (prevScanCharA == 'E') and (prevScanCharB == 'T') and (c == ' ') and matchScan("GET ") then
 							httpCommand = HTTPCommand.get()
-							scanURL(scanOffset-3, httpCommandUrl)
+							httpCommandUrl = scanURL(scanOffset-3, consume httpCommandUrl)
 						elseif (prevScanCharA == 'E') and (prevScanCharB == 'T') and (c == 'E') and matchScan("DELETE") then
 							httpCommand = HTTPCommand.delete()
-							scanURL(scanOffset-5, httpCommandUrl)
+							httpCommandUrl = scanURL(scanOffset-5, consume httpCommandUrl)
 						elseif (prevScanCharA == 't') and (prevScanCharB == 'h') and (c == ':') and matchScan("Content-Length:") then
-							scanHeader(scanOffset-5, httpContentLength)
+							httpContentLength = scanHeader(scanOffset-5, consume httpContentLength)
 							try scanContentLength = httpContentLength.usize()? end
+							httpContent.reserve(scanContentLength)
 						elseif (prevScanCharA == 'p') and (prevScanCharB == 'e') and (c == ':') and matchScan("Content-Type:") then
-							scanHeader(scanOffset-5, httpContentType)
+							httpContentType = scanHeader(scanOffset-5, consume httpContentType)
 						elseif (prevScanCharA == '\n') and (prevScanCharB == '\r') and (c == '\n') then
 							if scanContentLength == 0 then
 								resetReadForNextRequest()
 								return true
 							end
+							state = HttpRequestState.content()
+							
 							continue
 						end
-						
+					
 						prevScanCharA = prevScanCharB
 						prevScanCharB = c
-					
+				
 						scanOffset = scanOffset + 1
-					else
-						// we're past the request and just getting the contents
-						httpContent.push(c)
-						scanContentLength = scanContentLength - 1
-						if scanContentLength == 0 then
-							resetReadForNextRequest()
-							return true
-						end
+					end
+					
+					if httpContent.size() >= scanContentLength then
+						resetReadForNextRequest()
+						return true
+					end
+				
+				
+				| HttpServerConnectionState.content() =>
+					
+					let len = @pony_os_recv[USize](event, httpContent.cpointer(httpContent.size()), scanContentLength - httpContent.size())?
+					if len == 0 then
+						return false
+					end
+					httpContent.undefined(httpContent.size() + len)
+					
+					if httpContent.size() >= scanContentLength then
+						resetReadForNextRequest()
+						return true
 					end
 				end
-				
-				if scanContentLength > 0 then
-					scanOffset = 0
-					readBuffer.clear()
-				end
-				
+								
 			end
 		else
 			close()

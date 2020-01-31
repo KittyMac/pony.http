@@ -2,20 +2,28 @@ use "collections"
 use "stringext"
 use "net"
 
+type HttpRequestCallback is {(HttpResponseHeader val,Array[U8] val)}
 
 primitive HttpRequestState
 	fun header():U32 => 0
 	fun content():U32 => 1
 	fun finished():U32 => 2
 
-interface tag HttpRequestNotify
-	be httpResponse(headers:Array[U8] val, content:Array[U8] val)
-		
+
+class HttpResponseHeader
+	var statusCode:U32 = 0
+	var contentType:String val
+	var contentLength:USize
+	
+	new val create(statusCode':U32, contentType':String val, contentLength':USize) =>
+		statusCode = statusCode'
+		contentType = contentType'
+		contentLength = contentLength'
 
 class HttpRequest
 	let httpRequestString:String val
 	
-	var httpResponseHeaderBuffer:Array[U8] trn
+	var httpResponseHeaderBuffer:Array[U8]
 	var httpResponseContentBuffer:Array[U8] trn
 	
 	let maxHttpResponseHeaderSize:USize = 2048
@@ -32,17 +40,15 @@ class HttpRequest
 	var httpContentType:String ref
 	var httpStatus:String ref
 	var httpStatusCode:U32 = 0
-	
-	var notify:HttpRequestNotify
-	
+		
 	var requestState:U32 = HttpRequestState.header()
-	
+	let callback:HttpRequestCallback val
 
-	new create(notify':HttpRequestNotify, httpRequestString':String) =>
-		notify = notify'
+	new create(httpRequestString':String, callback':HttpRequestCallback val) =>
+		callback = callback'
 		
 		httpRequestString = httpRequestString'
-		httpResponseHeaderBuffer = recover Array[U8](maxHttpResponseHeaderSize) end
+		httpResponseHeaderBuffer = Array[U8](maxHttpResponseHeaderSize)
 		httpResponseContentBuffer = recover Array[U8](maxHttpResponseHeaderSize) end
 		
 		httpContentLength = String(128)
@@ -87,15 +93,18 @@ class HttpRequest
 			end
 		end
 	
-	fun ref consumeField(fieldVal:Array[U8] val):(Array[U8] trn^, Array[U8] val) =>
+	fun ref consumeFieldArray(fieldVal:Array[U8] val):(Array[U8] trn^, Array[U8] val) =>
 		(recover trn Array[U8] end, fieldVal)
+	
+	fun ref consumeFieldString(fieldVal:String val):(String trn^, String val) =>
+		(recover trn String end, fieldVal)
 	
 	fun ref finished() =>
 		requestState = HttpRequestState.finished()
 		
-		(httpResponseHeaderBuffer, let header) = consumeField(consume httpResponseHeaderBuffer)
-		(httpResponseContentBuffer, let content) = consumeField(consume httpResponseContentBuffer)
-		notify.httpResponse(header, content)
+		(httpResponseContentBuffer, let content) = consumeFieldArray(consume httpResponseContentBuffer)
+		
+		callback(HttpResponseHeader(httpStatusCode, httpContentType.clone(), readContentLength), content)
 	
 	fun ref write(event:AsioEventID):Bool =>
 		try
@@ -128,35 +137,30 @@ class HttpRequest
 				
 					let len = @pony_os_recv[USize](event, httpResponseHeaderBuffer.cpointer(httpResponseHeaderBuffer.size()), maxHttpResponseHeaderSize - httpResponseHeaderBuffer.size())?
 					if len == 0 then
+						rescheduleForMoreReads(event)
 						return false
 					end
 					httpResponseHeaderBuffer.undefined(httpResponseHeaderBuffer.size() + len)
 					
-					// For the response we're looking at something like the following
-					// 
-					// HTTP/1.1 200 OK
-					// Content-Type: text/html
-					// Content-Length: 512
-					// 
-					// Right now we only care about the status code, the content-type and the content-length at the moment.
-					for c in httpResponseHeaderBuffer.valuesAfter(readOffset) do						
+					for c in httpResponseHeaderBuffer.valuesAfter(readOffset) do
+						//@fprintf[I32](@pony_os_stdout[Pointer[U8]](), "%c".cstring(), c)
 						if requestState == HttpRequestState.content() then
 							httpResponseContentBuffer.push(c)
 							continue
 						end
 						
+						// Right now we only care about the status code, the content-type and the content-length at the moment.
 						if 	(prevScanCharA == 'T') and (prevScanCharB == 'T') and (c == 'P') and matchScan("HTTP") then
 							scanHttpStatus(readOffset-3, httpStatus)
 							try httpStatusCode = httpStatus.u32()? end
 						elseif (prevScanCharA == 'p') and (prevScanCharB == 'e') and (c == ':') and matchScan("Content-Type:") then
 							scanHeader(readOffset-5, httpContentType)
-							elseif (prevScanCharA == 't') and (prevScanCharB == 'h') and (c == ':') and matchScan("Content-Length:") then
+						elseif (prevScanCharA == 't') and (prevScanCharB == 'h') and (c == ':') and matchScan("Content-Length:") then
 							scanHeader(readOffset-5, httpContentLength)
 							try readContentLength = httpContentLength.usize()? end
 							httpResponseContentBuffer.reserve(readContentLength)
 						elseif (prevScanCharA == '\n') and (prevScanCharB == '\r') and (c == '\n') then
 							if readContentLength == 0 then
-								@fprintf[I32](@pony_os_stdout[Pointer[U8]](), "finished 1!\n".cstring())
 								finished()
 								return true
 							end
@@ -170,10 +174,15 @@ class HttpRequest
 						readOffset = readOffset + 1
 					end
 					
+					if httpResponseContentBuffer.size() >= readContentLength then
+						finished()
+						return true
+					end
 					
 				| HttpRequestState.content() =>
-				let len = @pony_os_recv[USize](event, httpResponseContentBuffer.cpointer(httpResponseContentBuffer.size()), readContentLength - httpResponseContentBuffer.size())?
+					let len = @pony_os_recv[USize](event, httpResponseContentBuffer.cpointer(httpResponseContentBuffer.size()), readContentLength - httpResponseContentBuffer.size())?
 					if len == 0 then
+						rescheduleForMoreReads(event)
 						return false
 					end
 					httpResponseContentBuffer.undefined(httpResponseContentBuffer.size() + len)
@@ -188,6 +197,7 @@ class HttpRequest
 			end
 		end
 		
+		rescheduleForMoreReads(event)
 		false
 		
 		
