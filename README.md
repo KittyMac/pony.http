@@ -1,16 +1,21 @@
 # pony.http
 
+**WARNING** This code only compiles with [my fork of Pony](https://github.com/KittyMac/ponyc/tree/roc_master).
+
 ### Purpose
 
-To provide a barebones http-like server for Pony. Note that this is and insanely early and specialized implmentation and you should avoid using the code in the repository!
+To provide a barebones http-like server for Pony, while also being a learning vehicle for me. 
 
-### TODO
+Note: This is a very early and generally specialized implementation.  You should avoid using the code in this repository if you are looking for a full-featured http server.
 
-- [ ] Client connect to server code
 
-- [ ] Fail on http requests which exceed a maximum size
-- [ ] Support SSL
-- [ ] Support compression
+
+### TODOs
+
+- Http client connect to server code (in progress)
+
+- Fail on http requests which exceed a maximum size
+- Support more of things in HTTP 1.1 (specifically compression and ssl)
 
 ## License
 
