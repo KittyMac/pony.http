@@ -60,6 +60,7 @@ actor Main is TestList
 		test(_Test2)
 		test(_Test3)
 		test(_Test4)
+		test(_Test5)
 	
  	fun @runtime_override_defaults(rto: RuntimeOptions) =>
 		rto.ponyanalysis = false
@@ -157,6 +158,22 @@ class iso _Test4 is UnitTest
 				else
 					h.complete(false)
 				end
+			})
+
+		else
+			h.complete(false)
+		end
+
+class iso _Test5 is UnitTest
+	fun name(): String => "test 5 - www.chimerasw.com"
+
+	fun apply(h: TestHelper) =>
+		try
+			h.long_test(30_000_000_000)
+
+			let client = HttpClient.connect("www.chimerasw.com", "80")?
+			client.httpGet("/index.html", {(response:HttpResponseHeader val, content:Array[U8] val)(h) => 
+				h.complete(response.statusCode == 200)
 			})
 
 		else

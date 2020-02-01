@@ -7,6 +7,8 @@ actor HttpClient
 	Makes connection to server, handles sending and receiving HTTP 1.1 requests.
 	"""
 	
+	var httpHost:String = ""
+	
 	var event:AsioEventID = AsioEvent.none()
 	var socket:U32 = 0
 	
@@ -21,7 +23,19 @@ actor HttpClient
 		pendingRequestWrites = Array[HttpRequest](128)
 		pendingRequestReads = Array[HttpRequest](128)
 		
-		@pony_os_connect_tcp4[U32](this, host.cstring(), port.cstring(), from.cstring(), AsioEvent.read_write_oneshot())
+		let addresses:Array[NetAddress] val = DNS(None, host, port)
+		var hostString = host
+		var portString = port
+		for address in addresses.values() do
+			try
+				(hostString, portString) = address.name(None)?
+				break
+			end
+		end
+		
+		httpHost = StringExt.format("Host: %s\r\n", host)
+		
+		@pony_os_connect_tcp4[U32](this, hostString.cstring(), portString.cstring(), from.cstring(), AsioEvent.read_write_oneshot())
 		
 		if false then error end
 	
@@ -69,16 +83,16 @@ actor HttpClient
 		
 		
 	be httpGet(urlPath:String, callback:HttpRequestCallback val) =>
-		let request = HttpRequest(StringExt.format("GET %s HTTP/1.1\r\nUser-Agent: Pony/0.1\r\n\r\n", urlPath), callback)
+		let request = HttpRequest(StringExt.format("GET %s HTTP/1.1\r\n%sUser-Agent: Pony/0.1\r\n\r\n", urlPath, httpHost), callback)
 		pendingRequestWrites.push(request)
 	
 	be httpPost(urlPath:String, content:String, callback:HttpRequestCallback val) =>
-		let postString = StringExt.format("POST %s HTTP/1.1\r\nUser-Agent: Pony/0.1\r\nContent-Type: application/json\r\nContent-Length: %s\r\n\r\n%s", urlPath, content.size(), content)
+		let postString = StringExt.format("POST %s HTTP/1.1\r\n%sUser-Agent: Pony/0.1\r\nContent-Type: application/json\r\nContent-Length: %s\r\n\r\n%s", urlPath, httpHost, content.size(), content)
 		let request = HttpRequest(postString, callback)
 		pendingRequestWrites.push(request)
 	
 	be httpPut(urlPath:String, content:String, callback:HttpRequestCallback val) =>
-		let request = HttpRequest(StringExt.format("PUT %s HTTP/1.1\r\nUser-Agent: Pony/0.1\r\n\r\n%s", urlPath, content), callback)
+		let request = HttpRequest(StringExt.format("PUT %s HTTP/1.1\r\n%sUser-Agent: Pony/0.1\r\n\r\n%s", urlPath, httpHost, content), callback)
 		pendingRequestWrites.push(request)
 		
 	fun ref close() =>
