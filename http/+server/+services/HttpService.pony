@@ -15,7 +15,10 @@ trait HttpService
 	fun httpStatusString(code:U32):String =>
 		match code
 		| 200 => "HTTP/1.1 200 OK"
+		| 400 => "HTTP/1.1 400 Bad Request"
 		| 404 => "HTTP/1.1 404 Not Found"
+		| 408 => "HTTP/1.1 408 Request Timeout"
+		| 413 => "HTTP/1.1 413 Request Too Large"
 		else "HTTP/1.1 500 Internal Server Error" end
 	
 	fun httpStatusHtmlString(code:U32):String =>

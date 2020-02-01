@@ -11,6 +11,10 @@
 	  {
 	    "type": "local",
 	    "local-path": "../pony.stringext"
+	  },
+	  {
+	    "type": "local",
+	    "local-path": "../pony.ttimer"
 	  }
   ]
 }

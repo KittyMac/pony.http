@@ -41,6 +41,9 @@ actor HttpServerConnection
 	let httpResponse:Array[U8] ref
 	var httpResponseWriteOffset:USize = 0
 	
+	var httpRequestTimeoutPeriodInNanoseconds:U64 = 10_000_000_000
+	var nanosecondsLastActivity:U64 = 0
+	
 	var fileReadFD:I32
 	var fileReadBuffer:Array[U8]
 	
@@ -48,8 +51,9 @@ actor HttpServerConnection
 	fun _batch():USize => 5_000
 	fun _priority():USize => 1
 	
-	new create(server':HttpServer) =>
+	new create(server':HttpServer, httpRequestTimeoutPeriodInMilliseconds:U64) =>
 		server = server'
+		httpRequestTimeoutPeriodInNanoseconds = httpRequestTimeoutPeriodInMilliseconds * 1_000_000
 		
 		serviceMap = recover Map[String box,HttpService val]() end
 		readBuffer = Array[U8](maxReadBufferSize)
@@ -61,6 +65,8 @@ actor HttpServerConnection
 		httpContentType = recover trn String(1024) end
 		httpContent = recover trn Array[U8](maxReadBufferSize) end
 		httpResponse = Array[U8](maxHttpResponse)
+		
+		markTimeoutActivity()
 		
 	be process(socket':U32, serviceMap':Map[String box,HttpService val] val) =>
 		socket = socket'
@@ -81,6 +87,16 @@ actor HttpServerConnection
 		
 		event = @pony_asio_event_create(this, socket, AsioEvent.read_write_oneshot(), 0, true)
 		@pony_asio_event_set_writeable(event, true)
+	
+	fun ref markTimeoutActivity() =>
+		nanosecondsLastActivity = @ponyint_cpu_tick[U64]()
+	
+	be heartbeat() =>
+		// check to see if this connection should timeout
+		let now = @ponyint_cpu_tick[U64]()
+		if (now - nanosecondsLastActivity) > httpRequestTimeoutPeriodInNanoseconds then
+			timeout()
+		end
 	
 	fun ref handleResponseWrites() =>
 		try
@@ -133,13 +149,14 @@ actor HttpServerConnection
 
 	
 	be _event_notify(event': AsioEventID, flags: U32, arg: U32) =>
-		//@fprintf[I32](@pony_os_stdout[Pointer[U8]](), "connection event %d == %d (disposable: %d)\n".cstring(), event', event, AsioEvent.disposable(flags))
 		if AsioEvent.disposable(flags) then
 			@pony_asio_event_destroy(event')
 			return
 		end
 	
 		if event is event' then
+			markTimeoutActivity()
+			
 			// perform our writes?
 			if AsioEvent.writeable(flags) then
 				handleResponseWrites()
@@ -362,13 +379,32 @@ actor HttpServerConnection
 								
 			end
 		else
-			close()
+			closeNow()
 		end
 		
 		false
-		
 	
-	fun ref close() =>
+	fun ref writeError(status:U32) =>
+		httpResponse.clear()
+		httpResponse.append(NullService.httpStatusString(status))
+		httpResponse.push('\r')
+		httpResponse.push('\n')
+		httpResponse.append("Connection: close")
+		httpResponse.push('\r')
+		httpResponse.push('\n')
+		httpResponse.push('\r')
+		httpResponse.push('\n')
+		
+		handleResponseWrites()
+	
+	fun ref timeout() =>
+		writeError(408)
+		close()
+	
+	be close() =>
+		closeNow()
+	
+	fun ref closeNow() =>
 		
 		if event != AsioEvent.none() then
 	        @pony_asio_event_unsubscribe(event)

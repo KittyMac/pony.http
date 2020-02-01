@@ -1,4 +1,5 @@
 use "collections"
+use "ttimer"
 
 use @pony_asio_event_create[AsioEventID](owner: AsioEventNotify, fd: U32, flags: U32, nsec: U64, noisy: Bool)
 use @pony_asio_event_fd[U32](event: AsioEventID)
@@ -11,7 +12,7 @@ use @pony_asio_event_set_writeable[None](event: AsioEventID, writeable: Bool)
 use @pony_asio_event_set_readable[None](event: AsioEventID, readable: Bool)
 use @ponyint_actor_num_messages[USize](anyActor:Any tag)
 
-actor HttpServer
+actor HttpServer is TTimerNotify
 	"""
 	Listens for initial connections, then passes the connection on to a pool of HttpServerConnections
 	"""
@@ -19,23 +20,32 @@ actor HttpServer
 	var closed:Bool = true
 	var socket: U32 = 0
 	
-	var connectionPool:Array[HttpServerConnection]
+	var freeConnectionPool:Array[HttpServerConnection]
+	var activeConnectionPool:Array[HttpServerConnection]
 	var totalConnections:USize = 0
 	
 	var httpServices:Map[String box,HttpService val] val
 	
+	var httpRequestTimeoutPeriod:U64 = 10_000
+	
+	var heartbeatTimer:TTimer
+	let heartbeatTimerPeriod:U64 = 5_000
 	
 	fun _tag():USize => 1
 	fun _batch():USize => 5_000
 	fun _priority():USize => -1
 	
 	new create() =>
-		connectionPool = Array[HttpServerConnection]()
+		freeConnectionPool = Array[HttpServerConnection]()
+		activeConnectionPool = Array[HttpServerConnection]()
 		httpServices = recover Map[String box,HttpService val]() end
+		heartbeatTimer = TTimer(heartbeatTimerPeriod, this, false)
 	
 	new listen(host:String, port:String)? =>
-		connectionPool = Array[HttpServerConnection](2048)
+		freeConnectionPool = Array[HttpServerConnection](2048)
+		activeConnectionPool = Array[HttpServerConnection](2048)
 		httpServices = recover Map[String box,HttpService val]() end
+		heartbeatTimer = TTimer(heartbeatTimerPeriod, this, false)
 		
 		event = @pony_os_listen_tcp4[AsioEventID](this, host.cstring(), port.cstring())
 		socket = @pony_asio_event_fd(event)
@@ -81,17 +91,28 @@ actor HttpServer
 						return
 					end
 			
-					if connectionPool.is_empty() then
-						HttpServerConnection(this).process(connectionSocket, httpServices)
+					if freeConnectionPool.is_empty() then
+						let connection = HttpServerConnection(this, httpRequestTimeoutPeriod)
+						connection.process(connectionSocket, httpServices)
+						activeConnectionPool.push(connection)
 					else
-						try connectionPool.pop()?.process(connectionSocket, httpServices) end
+						try 
+							let connection = freeConnectionPool.pop()?
+							connection.process(connectionSocket, httpServices)
+							activeConnectionPool.push(connection)
+						end
 					end
 				end
 				
 			end
 		end
 
-		
+	be timerNotify(timer:TTimer tag) =>
+		for connection in activeConnectionPool.values() do
+			if @ponyint_actor_num_messages[USize](connection) <= 2 then
+				connection.heartbeat()
+			end
+		end
 	
 	be registerService(url:String val, service:HttpService val) =>
 		let httpServicesTrn:Map[String box,HttpService val] trn = recover Map[String box,HttpService val]() end
@@ -106,4 +127,5 @@ actor HttpServer
 		
 		
 	be connectionFinished(connection:HttpServerConnection) =>
-		connectionPool.push(connection)
+		freeConnectionPool.push(connection)
+		activeConnectionPool.deleteOne(connection)
