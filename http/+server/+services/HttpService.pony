@@ -10,7 +10,7 @@ trait HttpService
 	payload to be returned to the client. HTTP services are inherently stateless, use HTTP[TBD]
 	"""
 	fun process(url:String val, content:Array[U8] val):(U32,String,HttpContentResponse) =>
-		(500, "text/plain", "Service Unavailable")
+		(500, "text/html", "Service Unavailable")
 	
 	fun httpStatusString(code:U32):String =>
 		match code
