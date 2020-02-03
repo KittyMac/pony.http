@@ -3,15 +3,17 @@ use "collections"
 // an array, a string, to a file descriptor
 type HttpContentResponse is (String|Array[U8]|I32)
 
-
 trait HttpService
 	"""
 	A service receives the parsed content of an HttpServerConnection, processes it, and returns the
 	payload to be returned to the client. HTTP services are inherently stateless, use HTTP[TBD]
 	"""
-	fun process(url:String val, content:Array[U8] val):(U32,String,HttpContentResponse) =>
-		(500, "text/html", "Service Unavailable")
-	
+	fun process(connection:HttpServerConnection, url:String val, content:Array[U8] val) =>
+		connection.respond(500, "text/html", "Service Unavailable")
+
+primitive NullService is HttpService
+
+primitive HttpServiceUtility
 	fun httpStatusString(code:U32):String =>
 		match code
 		| 200 => "HTTP/1.1 200 OK"
@@ -20,12 +22,12 @@ trait HttpService
 		| 408 => "HTTP/1.1 408 Request Timeout"
 		| 413 => "HTTP/1.1 413 Request Too Large"
 		else "HTTP/1.1 500 Internal Server Error" end
-	
+
 	fun httpStatusHtmlString(code:U32):String =>
 		match code
 		| 404 => "<HTML><HEAD><TITLE>Not Found</TITLE></HEAD><BODY><H2>404 Not Found</H2>The requested file could not be found.<P></BODY></HTML>"
 		else "<HTML><HEAD><TITLE>Internal Server Error</TITLE></HEAD><BODY><H2>500 Internal Server Error</H2>An error occurred while attempting to process your request.<P></BODY></HTML>" end
-	
+
 	fun httpContentTypeForExtension(extension:String):String =>
 		match extension
 		| ".arc" => "application/x-freearc"
@@ -101,7 +103,3 @@ trait HttpService
 		| ".3g2" => "video/3gpp2"
 		| ".7z" => "application/x-7z-compressed"
 	else "application/octet-stream" end
-
-
-primitive NullService is HttpService
-		

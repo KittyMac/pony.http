@@ -4,8 +4,8 @@ use "fileext"
 use "stringext"
 
 primitive HelloWorldService is HttpService
-	fun process(url:String val, content:Array[U8] val):(U32,String,HttpContentResponse) =>
-		(200, "text/plain", "Hello World")
+	fun process(connection:HttpServerConnection, url:String val, content:Array[U8] val) =>
+		connection.respond(200, "text/plain", "Hello World")
 
 class TestJsonAPI is HttpService
 	// look up and return people by matching first name or last name
@@ -22,7 +22,7 @@ class TestJsonAPI is HttpService
 				recover val PersonResponse.empty() end
 			end
 		
-		fun process(url:String val, content:Array[U8] val):(U32,String,HttpContentResponse) =>
+	fun process(connection:HttpServerConnection, url:String val, content:Array[U8] val) =>
 		try
 			let request = PersonRequest.fromString(String.from_array(content))?
 			let response = recover val 
@@ -34,9 +34,9 @@ class TestJsonAPI is HttpService
 					end
 					response'
 				end
-			return (200, "application/json", response.string())
+			connection.respond(200, "application/json", response.string())
 		else
-			(500, "text/html", "Service Unavailable")
+			connection.respond(500, "text/html", "Service Unavailable")
 		end
 
 

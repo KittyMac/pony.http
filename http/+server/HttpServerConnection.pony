@@ -148,6 +148,48 @@ actor HttpServerConnection
 		(recover trn String end, fieldVal)
 
 	
+	be respond(statusCode:U32, contentType:String val, responseContent':HttpContentResponse val) =>
+		var responseContent = responseContent'
+		if statusCode != 200 then
+			responseContent = HttpServiceUtility.httpStatusHtmlString(statusCode)
+		end
+
+		httpResponse.clear()
+		httpResponse.append(HttpServiceUtility.httpStatusString(statusCode))
+		httpResponse.push('\r')
+		httpResponse.push('\n')
+		httpResponse.append("Content-Type: ")
+		httpResponse.append(contentType)
+		httpResponse.push('\r')
+		httpResponse.push('\n')
+		httpResponse.append("Content-Length: ")
+
+		match responseContent
+		| let fd:I32 val =>
+			httpResponse.append(FileExt.size(fd).string())
+		| let string:String val =>
+			httpResponse.append(string.size().string())
+		| let array:Array[U8] val =>
+			httpResponse.append(array.size().string())
+		end
+
+		httpResponse.push('\r')
+		httpResponse.push('\n')
+		httpResponse.push('\r')
+		httpResponse.push('\n')
+
+		match responseContent
+		| let fd:I32 val =>
+			fileReadFD = fd
+			readNextChunkOfResponseContent()
+		| let string:String val =>
+			httpResponse.append(string)
+		| let array:Array[U8] val =>
+			httpResponse.append(array)
+		end
+
+		handleResponseWrites()
+	
 	be _event_notify(event': AsioEventID, flags: U32, arg: U32) =>
 		if AsioEvent.disposable(flags) then
 			@pony_asio_event_destroy(event')
@@ -178,48 +220,7 @@ actor HttpServerConnection
 					(httpCommandUrl, let httpCommandUrlVal) = consumeFieldString(consume httpCommandUrl)
 					(httpContent, let httpContentVal) = consumeFieldArray(consume httpContent)
 					
-					let response = service.process(httpCommandUrlVal, httpContentVal)
-										
-					var responseContent = response._3
-					if response._1 != 200 then
-						responseContent = service.httpStatusHtmlString(response._1)
-					end
-					
-					httpResponse.clear()
-					httpResponse.append(service.httpStatusString(response._1))
-					httpResponse.push('\r')
-					httpResponse.push('\n')
-					httpResponse.append("Content-Type: ")
-					httpResponse.append(response._2)
-					httpResponse.push('\r')
-					httpResponse.push('\n')
-					httpResponse.append("Content-Length: ")
-					
-					match responseContent
-					| let fd:I32 =>
-						httpResponse.append(FileExt.size(fd).string())
-					| let string:String =>
-						httpResponse.append(string.size().string())
-					| let array:Array[U8] =>
-						httpResponse.append(array.size().string())
-					end
-					
-					httpResponse.push('\r')
-					httpResponse.push('\n')
-					httpResponse.push('\r')
-					httpResponse.push('\n')
-					
-					match responseContent
-					| let fd:I32 =>
-						fileReadFD = fd
-						readNextChunkOfResponseContent()
-					| let string:String =>
-						httpResponse.append(string)
-					| let array:Array[U8] =>
-						httpResponse.append(array)
-					end
-					
-					handleResponseWrites()
+					service.process(this, httpCommandUrlVal, httpContentVal)
 
 				end
 				
@@ -386,7 +387,7 @@ actor HttpServerConnection
 	
 	fun ref writeError(status:U32) =>
 		httpResponse.clear()
-		httpResponse.append(NullService.httpStatusString(status))
+		httpResponse.append(HttpServiceUtility.httpStatusString(status))
 		httpResponse.push('\r')
 		httpResponse.push('\n')
 		httpResponse.append("Connection: close")
