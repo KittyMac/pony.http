@@ -35,6 +35,13 @@ actor HttpServer is TTimerNotify
 	fun _batch():USize => 5_000
 	fun _priority():USize => -1
 	
+	new empty() =>
+		freeConnectionPool = Array[HttpServerConnection]()
+		activeConnectionPool = Array[HttpServerConnection]()
+		httpServices = recover Map[String box,HttpService val]() end
+		heartbeatTimer = TTimer(heartbeatTimerPeriod, this, false)
+		heartbeatTimer.cancel()
+	
 	new create() =>
 		freeConnectionPool = Array[HttpServerConnection]()
 		activeConnectionPool = Array[HttpServerConnection]()
@@ -58,12 +65,14 @@ actor HttpServer is TTimerNotify
 		
 		closed = false
 	
-	fun ref close() =>
+	be close() =>
 		if closed then
 			return
 		end
 
 		closed = true
+		
+		heartbeatTimer.cancel()
 
 		if not event.is_null() then
 			@pony_asio_event_unsubscribe(event)
