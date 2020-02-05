@@ -148,18 +148,27 @@ actor HttpServerConnection
 		(recover trn String end, fieldVal)
 
 	
-	be respond(statusCode:U32, contentType:String val, responseContent':HttpContentResponse val) =>
-		var responseContent = responseContent'
-		if statusCode != 200 then
-			responseContent = HttpServiceUtility.httpStatusHtmlString(statusCode)
+	be respond(response:HttpServiceResponse val) =>
+		respondNow(response)
+	
+	fun ref respondNow(response:HttpServiceResponse val) =>
+		if response.statusCode == 0 then
+			// special code means this is a delayed response and someone will call respond()
+			// in the future with the full response.
+			return
 		end
-
+		
+		var responseContent = response.content
+		if response.statusCode != 200 then
+			responseContent = HttpServiceUtility.httpStatusHtmlString(response.statusCode)
+		end
+		
 		httpResponse.clear()
-		httpResponse.append(HttpServiceUtility.httpStatusString(statusCode))
+		httpResponse.append(HttpServiceUtility.httpStatusString(response.statusCode))
 		httpResponse.push('\r')
 		httpResponse.push('\n')
 		httpResponse.append("Content-Type: ")
-		httpResponse.append(contentType)
+		httpResponse.append(response.contentType)
 		httpResponse.push('\r')
 		httpResponse.push('\n')
 		httpResponse.append("Content-Length: ")
@@ -220,7 +229,7 @@ actor HttpServerConnection
 					(httpCommandUrl, let httpCommandUrlVal) = consumeFieldString(consume httpCommandUrl)
 					(httpContent, let httpContentVal) = consumeFieldArray(consume httpContent)
 					
-					service.process(this, httpCommandUrlVal, httpContentVal)
+					respondNow(service.process(this, httpCommandUrlVal, httpContentVal))
 
 				end
 				

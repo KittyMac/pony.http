@@ -4,15 +4,11 @@ use "fileext"
 use "stringext"
 
 primitive HelloWorldService is HttpService
-	fun process(connection:HttpServerConnection, url:String val, content:Array[U8] val) =>
-		connection.respond(200, "text/plain", "Hello World")
+	fun process(connection:HttpServerConnection, url:String val, content:Array[U8] val):HttpServiceResponse =>
+		HttpServiceResponse(200, "text/plain", "Hello World")
 
 class TestJsonAPI is HttpService
 	// look up and return people by matching first name or last name
-	// TODO: add support for stateful services?  Or should all HttpService classes be immutable and
-	// they should call to their own actor
-	// TODO: What to do if the answer takes time to get (ie if we want to pull information from a
-	// DB, then we need to call back to the HttpServerConnection and we cannot return immediately)
 	let people:PersonResponse val
 	
 	new val create() =>
@@ -22,7 +18,7 @@ class TestJsonAPI is HttpService
 				recover val PersonResponse.empty() end
 			end
 		
-	fun process(connection:HttpServerConnection, url:String val, content:Array[U8] val) =>
+	fun process(connection:HttpServerConnection, url:String val, content:Array[U8] val):HttpServiceResponse =>
 		try
 			let request = PersonRequest.fromString(String.from_array(content))?
 			let response = recover val 
@@ -34,9 +30,9 @@ class TestJsonAPI is HttpService
 					end
 					response'
 				end
-			connection.respond(200, "application/json", response.string())
+			HttpServiceResponse(200, "application/json", response.string())
 		else
-			connection.respond(500, "text/html", "Service Unavailable")
+			HttpServiceResponse(500, "text/html", "Service Unavailable")
 		end
 
 
@@ -63,7 +59,7 @@ actor Main is TestList
 		test(_Test5)
 	
  	fun @runtime_override_defaults(rto: RuntimeOptions) =>
-		rto.ponyanalysis = false
+		rto.ponyanalysis = 1
 		rto.ponynoscale = true
 		rto.ponynoblock = true
 		rto.ponynoyield = true

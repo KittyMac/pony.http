@@ -3,13 +3,30 @@ use "collections"
 // an array, a string, to a file descriptor
 type HttpContentResponse is (String|Array[U8]|I32)
 
+class val HttpServiceResponse
+	let statusCode:U32
+	let contentType:String
+	let content:HttpContentResponse val
+	
+	new val delayed() =>
+		statusCode = 0
+		contentType = ""
+		content = 0
+	
+	new val create(statusCode':U32 val, contentType':String val, content':HttpContentResponse val) =>
+		statusCode = statusCode'
+		contentType = contentType'
+		content = content'
+		
+
 trait HttpService
 	"""
 	A service receives the parsed content of an HttpServerConnection, processes it, and returns the
-	payload to be returned to the client. HTTP services are inherently stateless, use HTTP[TBD]
+	payload to be connection by calling the respond() behaviour
 	"""
-	fun process(connection:HttpServerConnection, url:String val, content:Array[U8] val) =>
-		connection.respond(500, "text/html", "Service Unavailable")
+	fun process(connection:HttpServerConnection, url:String val, content:Array[U8] val):HttpServiceResponse =>
+		HttpServiceResponse(500, "text/html", "Service Unavailable")
+	
 
 primitive NullService is HttpService
 

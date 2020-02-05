@@ -15,6 +15,8 @@ actor HttpClient
 	var pendingRequestWrites:Array[HttpRequest]
 	var pendingRequestReads:Array[HttpRequest]
 	
+	fun _tag():USize => 11
+	
 	new create() =>
 		pendingRequestWrites = Array[HttpRequest](128)
 		pendingRequestReads = Array[HttpRequest](128)

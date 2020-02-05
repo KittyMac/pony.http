@@ -15,7 +15,7 @@ class HttpFileService is HttpService
 		allowDotFiles = allowDotFiles'
 		
 
-	fun process(connection:HttpServerConnection, url:String val, content:Array[U8] val) =>
+	fun process(connection:HttpServerConnection, url:String val, content:Array[U8] val):HttpServiceResponse =>
 		// 1. construct the path to the local file
 		var fileURL = String(1024)
 		fileURL.append(webRoot)
@@ -29,7 +29,7 @@ class HttpFileService is HttpService
 		
 		// 3. Don't allow downloading of hidden files or directories?
 		if (allowDotFiles == false) and fileURL.contains("/.") then
-			connection.respond(404, "text/html; charset=UTF-8", "")
+			HttpServiceResponse(404, "text/html; charset=UTF-8", "")
 		end
 		
 		// 3. determine the content-type from the extension
@@ -41,7 +41,7 @@ class HttpFileService is HttpService
 					
 		// 5. return results
 		if fd > 0 then
-			connection.respond(200, contentType, fd)
+			HttpServiceResponse(200, contentType, fd)
 		else
-			connection.respond(404, "text/html; charset=UTF-8", "")
+			HttpServiceResponse(404, "text/html; charset=UTF-8", "")
 		end
