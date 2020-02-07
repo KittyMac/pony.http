@@ -144,13 +144,20 @@ class iso _Test4 is UnitTest
 			
 			client.httpPost("/api/person", request.string(), {(response:HttpResponseHeader val, content:Array[U8] val)(h) => 
 				try
-					if response.statusCode != 200 then
-						error
-					end
-
 					let persons = PersonResponse.fromString(String.from_array(content))?
 					let person = persons(0)?
 					h.complete( (person.firstName == "Jane") and (person.age == 27) and (persons.size() == 1) )
+				else
+					h.complete(false)
+				end
+			})
+			
+			request.firstName = "John"
+			client.httpPost("/api/person", request.string(), {(response:HttpResponseHeader val, content:Array[U8] val)(h) => 
+				try
+					let persons = PersonResponse.fromString(String.from_array(content))?
+					let person = persons(0)?
+					h.complete( (person.firstName == "John") and (person.age == 24) and (persons.size() == 1) )
 				else
 					h.complete(false)
 				end

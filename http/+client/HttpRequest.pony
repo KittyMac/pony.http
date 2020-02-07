@@ -118,9 +118,8 @@ class HttpRequest
 				end
 				writeOffset = writeOffset + n
 			end
-		else
-			writeOffset = 0
 		end
+		writeOffset = 0
 		true
 	
 	fun ref rescheduleForMoreReads(event:AsioEventID) =>
@@ -128,10 +127,8 @@ class HttpRequest
 		@pony_asio_event_resubscribe_read(event)
 		
 	fun ref read(event:AsioEventID):Bool =>
-		
 		try
 			while true do
-				
 				match requestState
 				| HttpRequestState.header() =>
 				
@@ -195,6 +192,9 @@ class HttpRequest
 				end
 								
 			end
+		else
+			finished()
+			return true
 		end
 		
 		rescheduleForMoreReads(event)

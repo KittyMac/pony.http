@@ -66,8 +66,11 @@ actor HttpClient
 				try
 					let request = pendingRequestWrites(0)?
 					if request.write(event) then
-						pendingRequestWrites.pop()?
+						pendingRequestWrites.shift()?
 						pendingRequestReads.push(request)
+						
+						@pony_asio_event_set_readable[None](event, false)
+						@pony_asio_event_resubscribe_read(event)
 					end
 				end
 			end
@@ -76,11 +79,17 @@ actor HttpClient
 				try
 					let request = pendingRequestReads(0)?
 					if request.read(event) then
-						pendingRequestWrites.pop()?
+						pendingRequestReads.shift()?
+						
+				        @pony_asio_event_set_writeable(event, false)
+				        @pony_asio_event_resubscribe_write(event)
 					end
 				end
 			end
 			
+			if event != AsioEvent.none() then
+				@ponyint_actor_yield[None](this)
+			end
 		end
 		
 		

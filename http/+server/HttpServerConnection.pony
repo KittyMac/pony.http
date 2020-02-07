@@ -295,9 +295,12 @@ actor HttpServerConnection
 		httpResponse.clear()
 	
 	fun ref resetReadForNextRequest() =>
+		// we can't just clear the buffer, there might be more request right after this one...
 		scanOffset = 0
-		scanContentLength = 0
 		readBuffer.clear()
+		scanContentLength = 0
+		state = HttpRequestState.header()
+		
 	
 	fun ref read():Bool =>
 		try
@@ -374,7 +377,6 @@ actor HttpServerConnection
 				
 				
 				| HttpServerConnectionState.content() =>
-					
 					let len = @pony_os_recv[USize](event, httpContent.cpointer(httpContent.size()), scanContentLength - httpContent.size())?
 					if len == 0 then
 						return false
@@ -415,7 +417,6 @@ actor HttpServerConnection
 		closeNow()
 	
 	fun ref closeNow() =>
-		
 		if event != AsioEvent.none() then
 	        @pony_asio_event_unsubscribe(event)
 			event = AsioEvent.none()
