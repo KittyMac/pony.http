@@ -49,11 +49,7 @@ actor HttpServerConnection
 	
 	fun _tag():USize => 2
 	fun _batch():USize => 5_000
-	fun _priority():USize => 1
-	
-	fun _final() =>
-		@fprintf[I32](@pony_os_stdout[Pointer[U8]](), "HttpServerConnection._final()\n".cstring())
-		
+	fun _priority():USize => 1		
 	
 	new create(server':HttpServer, httpRequestTimeoutPeriodInMilliseconds:U64) =>
 		server = server'
