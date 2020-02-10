@@ -113,7 +113,7 @@ actor HttpClient
 	fun ref close() =>
 		if event != AsioEvent.none() then
 	        @pony_asio_event_unsubscribe(event)
-			@pony_asio_event_destroy(event)
+			//@pony_asio_event_destroy(event)
 			event = AsioEvent.none()
 	
 			@pony_os_socket_close[None](socket)			

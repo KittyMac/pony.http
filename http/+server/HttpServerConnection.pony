@@ -51,6 +51,10 @@ actor HttpServerConnection
 	fun _batch():USize => 5_000
 	fun _priority():USize => 1
 	
+	fun _final() =>
+		@fprintf[I32](@pony_os_stdout[Pointer[U8]](), "HttpServerConnection._final()\n".cstring())
+		
+	
 	new create(server':HttpServer, httpRequestTimeoutPeriodInMilliseconds:U64) =>
 		server = server'
 		httpRequestTimeoutPeriodInNanoseconds = httpRequestTimeoutPeriodInMilliseconds * 1_000_000
@@ -423,7 +427,7 @@ actor HttpServerConnection
 	fun ref closeNow() =>
 		if event != AsioEvent.none() then
 	        @pony_asio_event_unsubscribe(event)
-			@pony_asio_event_destroy(event)
+			//@pony_asio_event_destroy(event)
 			event = AsioEvent.none()
 		
 			@pony_os_socket_close[None](socket)			

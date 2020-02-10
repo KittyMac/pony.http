@@ -59,7 +59,7 @@ actor HttpServer is TTimerNotify
 
 		if socket < 0 then
 			@pony_asio_event_unsubscribe(event)
-			@pony_asio_event_destroy(event)
+			//@pony_asio_event_destroy(event)
 			event = AsioEvent.none()
 			error
 		end
@@ -86,7 +86,7 @@ actor HttpServer is TTimerNotify
 
 		if not event.is_null() then
 			@pony_asio_event_unsubscribe(event)
-			@pony_asio_event_destroy(event)
+			//@pony_asio_event_destroy(event)
 			@pony_os_socket_close[None](socket)
 			event = AsioEvent.none()
 			socket = -1
