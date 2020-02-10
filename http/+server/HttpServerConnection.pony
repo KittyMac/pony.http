@@ -105,7 +105,6 @@ actor HttpServerConnection
 				if n == 0 then
 			        @pony_asio_event_set_writeable(event, false)
 			        @pony_asio_event_resubscribe_write(event)
-					@ponyint_actor_yield[None](this)
 					return
 				end
 				httpResponseWriteOffset = httpResponseWriteOffset + n
@@ -237,9 +236,13 @@ actor HttpServerConnection
 				if event != AsioEvent.none() then
 					@pony_asio_event_set_readable[None](event, false)
 					@pony_asio_event_resubscribe_read(event)
-					@ponyint_actor_yield[None](this)
 				end
 			end
+		end
+		
+		// if we have an open connection, we want to remain scheduled until we're not so we can respond quickly
+		if event != AsioEvent.none() then
+			@ponyint_actor_yield[None](this)
 		end
 	
 	fun ref matchScan(string:String):Bool =>
@@ -414,11 +417,13 @@ actor HttpServerConnection
 		close()
 	
 	be close() =>
+		writeError(500)
 		closeNow()
 	
 	fun ref closeNow() =>
 		if event != AsioEvent.none() then
 	        @pony_asio_event_unsubscribe(event)
+			@pony_asio_event_destroy(event)
 			event = AsioEvent.none()
 		
 			@pony_os_socket_close[None](socket)			

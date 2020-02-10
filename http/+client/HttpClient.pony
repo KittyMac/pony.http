@@ -46,7 +46,11 @@ actor HttpClient
 		(errno == 0) and (value == 0)
 	
 	be _event_notify(event': AsioEventID, flags: U32, arg: U32) =>
-	
+		if AsioEvent.disposable(flags) then
+			@pony_asio_event_destroy(event')
+			return
+		end
+		
 		// if we receive an event and its writable, this is the clue we need that
 		// the tcp connection has completed successfully
 		if event isnt event' then
@@ -109,6 +113,7 @@ actor HttpClient
 	fun ref close() =>
 		if event != AsioEvent.none() then
 	        @pony_asio_event_unsubscribe(event)
+			@pony_asio_event_destroy(event)
 			event = AsioEvent.none()
 	
 			@pony_os_socket_close[None](socket)			

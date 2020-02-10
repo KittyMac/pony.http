@@ -59,6 +59,7 @@ actor HttpServer is TTimerNotify
 
 		if socket < 0 then
 			@pony_asio_event_unsubscribe(event)
+			@pony_asio_event_destroy(event)
 			event = AsioEvent.none()
 			error
 		end
@@ -73,9 +74,19 @@ actor HttpServer is TTimerNotify
 		closed = true
 		
 		heartbeatTimer.cancel()
+		
+		for connection in activeConnectionPool.values() do
+			connection.close()
+		end
+		for connection in freeConnectionPool.values() do
+			connection.close()
+		end
+		activeConnectionPool.clear()
+		freeConnectionPool.clear()
 
 		if not event.is_null() then
 			@pony_asio_event_unsubscribe(event)
+			@pony_asio_event_destroy(event)
 			@pony_os_socket_close[None](socket)
 			event = AsioEvent.none()
 			socket = -1
