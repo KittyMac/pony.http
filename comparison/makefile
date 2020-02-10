@@ -7,3 +7,6 @@ node:
 
 rust:
 	cd hyper_server; cargo run --release
+
+jennet:
+	./jennet-master/build/release/params
