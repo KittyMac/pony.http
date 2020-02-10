@@ -24,7 +24,7 @@ trait HttpService
 	A service receives the parsed content of an HttpServerConnection, processes it, and returns the
 	payload to be connection by calling the respond() behaviour
 	"""
-	fun process(connection:HttpServerConnection, url:String val, content:Array[U8] val):HttpServiceResponse =>
+	fun process(connection:HttpServerConnection, url:String val, params:String val, content:Array[U8] val):HttpServiceResponse =>
 		HttpServiceResponse(500, "text/html", "Service Unavailable")
 	
 

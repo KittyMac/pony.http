@@ -15,7 +15,7 @@ class HttpFileService is HttpService
 		allowDotFiles = allowDotFiles'
 		
 
-	fun process(connection:HttpServerConnection, url:String val, content:Array[U8] val):HttpServiceResponse =>
+	fun process(connection:HttpServerConnection, url:String val, params:String val, content:Array[U8] val):HttpServiceResponse =>
 		// 1. construct the path to the local file
 		var fileURL = String(1024)
 		fileURL.append(webRoot)

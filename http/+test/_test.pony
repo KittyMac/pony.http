@@ -4,7 +4,7 @@ use "fileext"
 use "stringext"
 
 primitive HelloWorldService is HttpService
-	fun process(connection:HttpServerConnection, url:String val, content:Array[U8] val):HttpServiceResponse =>
+	fun process(connection:HttpServerConnection, url:String val, params:String val, content:Array[U8] val):HttpServiceResponse =>
 		HttpServiceResponse(200, "text/plain", "Hello World")
 
 class TestJsonAPI is HttpService
@@ -18,7 +18,7 @@ class TestJsonAPI is HttpService
 				recover val PersonResponse.empty() end
 			end
 		
-	fun process(connection:HttpServerConnection, url:String val, content:Array[U8] val):HttpServiceResponse =>
+	fun process(connection:HttpServerConnection, url:String val, params:String val, content:Array[U8] val):HttpServiceResponse =>
 		try
 			let request = PersonRequest.fromString(String.from_array(content))?
 			let response = recover val 

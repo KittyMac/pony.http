@@ -33,6 +33,7 @@ actor HttpServerConnection
 	
 	var httpCommand:U32 = HTTPCommand.none()
 	var httpCommandUrl:String trn
+	var httpCommandParameters:String trn
 	var httpContentLength:String trn
 	var httpContentType:String trn
 	var httpContent:Array[U8] trn
@@ -61,6 +62,7 @@ actor HttpServerConnection
 		fileReadFD = 0
 		
 		httpCommandUrl = recover trn String(1024) end
+		httpCommandParameters = recover trn String(1024) end
 		httpContentLength = recover trn String(1024) end
 		httpContentType = recover trn String(1024) end
 		httpContent = recover trn Array[U8](maxReadBufferSize) end
@@ -80,6 +82,7 @@ actor HttpServerConnection
 		
 		httpCommand = HTTPCommand.none()
 		httpCommandUrl.clear()
+		httpCommandParameters.clear()
 		httpContentLength.clear()
 		httpContentType.clear()
 		httpContent.clear()
@@ -224,11 +227,12 @@ actor HttpServerConnection
 							service = serviceMap("*")?
 						end
 					end
-					
+										
 					(httpCommandUrl, let httpCommandUrlVal) = consumeFieldString(consume httpCommandUrl)
+					(httpCommandParameters, let httpCommandParametersVal) = consumeFieldString(consume httpCommandParameters)
 					(httpContent, let httpContentVal) = consumeFieldArray(consume httpContent)
-					
-					respondNow(service.process(this, httpCommandUrlVal, httpContentVal))
+										
+					respondNow(service.process(this, httpCommandUrlVal, httpCommandParametersVal, httpContentVal))
 
 				end
 				
@@ -252,6 +256,9 @@ actor HttpServerConnection
 		var spaceCount:USize = 0
 		string.clear()
 		for c in readBuffer.valuesAfter(offset) do
+			if (c == '?') then
+				return consume string
+			end
 			if (c == ' ') or (c == '\n') or (c == '\r') then
 				spaceCount = spaceCount + 1
 				if spaceCount == 2 then
@@ -261,6 +268,27 @@ actor HttpServerConnection
 			end
 			if (spaceCount == 1) then
 				string.push(c)
+			end
+		end
+		consume string
+	
+	fun ref scanParameters(offset:USize, string:String trn):String trn^ =>
+		var spaceCount:USize = 0
+		var questionCount:USize = 0
+		string.clear()
+		for c in readBuffer.valuesAfter(offset) do
+			if (c == ' ') or (c == '\n') or (c == '\r') then
+				spaceCount = spaceCount + 1
+				if spaceCount == 2 then
+					return consume string
+				end
+				continue
+			end
+			if ((questionCount == 1) and (spaceCount == 1)) then
+				string.push(c)
+			end
+			if c == '?' then
+				questionCount = questionCount + 1
 			end
 		end
 		consume string
@@ -342,15 +370,19 @@ actor HttpServerConnection
 						if 	(prevScanCharA == 'O') and (prevScanCharB == 'S') and (c == 'T') and matchScan("POST") then
 							httpCommand = HTTPCommand.post()
 							httpCommandUrl = scanURL(scanOffset-3, consume httpCommandUrl)
+							httpCommandParameters = scanParameters(scanOffset-3, consume httpCommandParameters)
 						elseif (prevScanCharA == 'U') and (prevScanCharB == 'T') and (c == ' ') and matchScan("PUT ") then
 							httpCommand = HTTPCommand.put()
 							httpCommandUrl = scanURL(scanOffset-3, consume httpCommandUrl)
+							httpCommandParameters = scanParameters(scanOffset-3, consume httpCommandParameters)
 						elseif (prevScanCharA == 'E') and (prevScanCharB == 'T') and (c == ' ') and matchScan("GET ") then
 							httpCommand = HTTPCommand.get()
 							httpCommandUrl = scanURL(scanOffset-3, consume httpCommandUrl)
+							httpCommandParameters = scanParameters(scanOffset-3, consume httpCommandParameters)
 						elseif (prevScanCharA == 'E') and (prevScanCharB == 'T') and (c == 'E') and matchScan("DELETE") then
 							httpCommand = HTTPCommand.delete()
 							httpCommandUrl = scanURL(scanOffset-5, consume httpCommandUrl)
+							httpCommandParameters = scanParameters(scanOffset-5, consume httpCommandParameters)
 						elseif (prevScanCharA == 't') and (prevScanCharB == 'h') and (c == ':') and matchScan("Content-Length:") then
 							httpContentLength = scanHeader(scanOffset-5, consume httpContentLength)
 							try scanContentLength = httpContentLength.usize()? end
