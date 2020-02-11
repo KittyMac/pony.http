@@ -95,7 +95,7 @@ actor HttpClient
         @ponyint_actor_yield[None](this)
       end
     end
-    
+  
     
   be httpGet(urlPath:String, callback:HttpRequestCallback val) =>
     let request = HttpRequest(StringExt.format("GET %s HTTP/1.1\r\n%sUser-Agent: Pony/0.1\r\n\r\n", urlPath, httpHost), callback)
