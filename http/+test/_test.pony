@@ -4,187 +4,189 @@ use "fileext"
 use "stringext"
 
 primitive HelloWorldService is HttpService
-	fun process(connection:HttpServerConnection, url:String val, params:String val, content:Array[U8] val):HttpServiceResponse =>
-		HttpServiceResponse(200, "text/plain", "Hello World")
+  fun process(connection:HttpServerConnection, url:String val, params:String val, content:Array[U8] val):HttpServiceResponse =>
+    HttpServiceResponse(200, "text/plain", "Hello World")
 
 class TestJsonAPI is HttpService
-	// look up and return people by matching first name or last name
-	let people:PersonResponse val
-	
-	new val create() =>
-		people = try
-				recover val PersonResponse.fromString(PersonDataJson())? end
-			else
-				recover val PersonResponse.empty() end
-			end
-		
-	fun process(connection:HttpServerConnection, url:String val, params:String val, content:Array[U8] val):HttpServiceResponse =>
-		try
-			let request = PersonRequest.fromString(String.from_array(content))?
-			let response = recover val 
-					let response' = PersonResponse.empty()
-					for person in people.values() do
-						if (person.firstName == request.firstName) or (person.lastName == request.lastName) then
-							response'.push(person.clone()?)
-						end
-					end
-					response'
-				end
-			HttpServiceResponse(200, "application/json", response.string())
-		else
-			HttpServiceResponse(500, "text/html", "Service Unavailable")
-		end
+  // look up and return people by matching first name or last name
+  let people:PersonResponse val
+  
+  new val create() =>
+    people = try
+        recover val PersonResponse.fromString(PersonDataJson())? end
+      else
+        recover val PersonResponse.empty() end
+      end
+    
+  fun process(connection:HttpServerConnection, url:String val, params:String val, content:Array[U8] val):HttpServiceResponse =>
+    try
+      let request = PersonRequest.fromString(String.from_array(content))?
+      let response = recover val 
+          let response' = PersonResponse.empty()
+          for person in people.values() do
+            if (person.firstName == request.firstName) or (person.lastName == request.lastName) then
+              response'.push(person.clone()?)
+            end
+          end
+          response'
+        end
+      HttpServiceResponse(200, "application/json", response.string())
+    else
+      HttpServiceResponse(500, "text/html", "Service Unavailable")
+    end
 
 
 
 
 
 actor Main is TestList
-	new create(env: Env) => PonyTest(env, this)
-	new make() => None
+  new create(env: Env) => PonyTest(env, this)
+  new make() => None
 
-	fun tag tests(test: PonyTest) =>
-		
-		try
-			let server = HttpServer.listen("0.0.0.0", "8080")?
-			server.registerService("/api/person", TestJsonAPI)
-			server.registerService("/hello/world", HelloWorldService)
-			server.registerService("*", HttpFileService.default())
-		end
-		
-		test(_Test1)
-		test(_Test2)
-		test(_Test3)
-		test(_Test4)
-		test(_Test5)
+  fun tag tests(test: PonyTest) =>
+    
+    try
+      let server = HttpServer.listen("0.0.0.0", "8080")?
+      server.registerService("/api/person", TestJsonAPI)
+      server.registerService("/hello/world", HelloWorldService)
+      server.registerService("*", HttpFileService.default())
+    end
+    
+    test(_Test1)
+    test(_Test2)
+    test(_Test3)
+    test(_Test4)
+    test(_Test5)
   
-	be testsFinished(test: PonyTest, success:Bool) =>
+  be testsFinished(test: PonyTest, success:Bool) =>
     if success then
       @exit[None](I32(0))
     end
-		@exit[None](I32(1))
-	
- 	fun @runtime_override_defaults(rto: RuntimeOptions) =>
-		rto.ponyanalysis = 1
-		rto.ponynoscale = true
-		rto.ponynoblock = true
-		rto.ponynoyield = true
-		rto.ponygcinitial = 0
-		rto.ponygcfactor = 1.0
+    @exit[None](I32(1))
+  
+  fun @runtime_override_defaults(rto: RuntimeOptions) =>
+    rto.ponyanalysis = 1
+    rto.ponynoscale = true
+    rto.ponynoblock = true
+    rto.ponynoyield = true
+    rto.ponygcinitial = 0
+    rto.ponygcfactor = 1.0
 
 
-	
+  
 class iso _Test1 is UnitTest
-	fun name(): String => "test 1 - request and compare index.html"
+  fun name(): String => "test 1 - request and compare index.html"
 
-	fun apply(h: TestHelper) =>
-		try
-			h.long_test(30_000_000_000)
-			
-			let client = HttpClient.connect("127.0.0.1", "8080")?
-			client.httpGet("/index.html", {(response:HttpResponseHeader val, content:Array[U8] val)(h) => 
-				try
-					if response.statusCode != 200 then
-						error
-					end
-					h.complete(FileExt.fileToArray("./public_html/index.html")?.size() == content.size())
-				else
-					h.complete(false)
-				end
-			})
-			
-		else
-			h.complete(false)
-		end
+  fun apply(h: TestHelper) =>
+    try
+      h.long_test(30_000_000_000)
+      
+      let client = HttpClient.connect("127.0.0.1", "8080")?
+      client.httpGet("/index.html", {(response:HttpResponseHeader val, content:Array[U8] val)(h) => 
+        try
+          if response.statusCode != 200 then
+            error
+          end
+          h.complete(FileExt.fileToArray("./public_html/index.html")?.size() == content.size())
+        else
+          h.complete(false)
+        end
+      })
+      
+    else
+      h.complete(false)
+    end
 
 class iso _Test2 is UnitTest
-	fun name(): String => "test 2 - 404 error"
+  fun name(): String => "test 2 - 404 error"
 
-	fun apply(h: TestHelper) =>
-		try
-			h.long_test(30_000_000_000)
-	
-			let client = HttpClient.connect("127.0.0.1", "8080")?
-			client.httpGet("/file_which_does_not_exist.html", {(response:HttpResponseHeader val, content:Array[U8] val)(h) => 
-				h.complete((response.statusCode == 404) and (response.contentLength == 126))
-			})
-	
-		else
-			h.complete(false)
-		end
+  fun apply(h: TestHelper) =>
+    try
+      h.long_test(30_000_000_000)
+  
+      let client = HttpClient.connect("127.0.0.1", "8080")?
+      client.httpGet("/file_which_does_not_exist.html", {(response:HttpResponseHeader val, content:Array[U8] val)(h) => 
+        h.complete((response.statusCode == 404) and (response.contentLength == 126))
+      })
+  
+    else
+      h.complete(false)
+    end
 
 class iso _Test3 is UnitTest
-	fun name(): String => "test 3 - large file download"
+  fun name(): String => "test 3 - large file download"
 
-	fun apply(h: TestHelper) =>
-		try
-			h.long_test(30_000_000_000)
+  fun apply(h: TestHelper) =>
+    try
+      h.long_test(30_000_000_000)
 
-			let client = HttpClient.connect("127.0.0.1", "8080")?
-			client.httpGet("/big2.lz", {(response:HttpResponseHeader val, content:Array[U8] val)(h) => 
-				try
-					if response.statusCode != 200 then
-						error
-					end
-					h.complete(FileExt.fileToArray("./public_html/big2.lz")?.size() == content.size())
-				else
-					h.complete(false)
-				end
-			})
+      let client = HttpClient.connect("127.0.0.1", "8080")?
+      client.httpGet("/big2.lz", {(response:HttpResponseHeader val, content:Array[U8] val)(h) => 
+        try
+          if response.statusCode != 200 then
+            error
+          end
+          h.complete(FileExt.fileToArray("./public_html/big2.lz")?.size() == content.size())
+        else
+          @fprintf[I32](@pony_os_stdout[Pointer[U8]](), "%s\n".cstring(), __error_loc)
+          h.complete(false)
+        end
+      })
 
-		else
-			h.complete(false)
-		end
+    else
+      @fprintf[I32](@pony_os_stdout[Pointer[U8]](), "%s\n".cstring(), __error_loc)
+      h.complete(false)
+    end
 
 class iso _Test4 is UnitTest
-	fun name(): String => "test 4 - json api request/response"
+  fun name(): String => "test 4 - json api request/response"
 
-	fun apply(h: TestHelper) =>
-		try
-			h.long_test(30_000_000_000)
+  fun apply(h: TestHelper) =>
+    try
+      h.long_test(30_000_000_000)
 
-			let client = HttpClient.connect("127.0.0.1", "8080")?
-			
-			let request = PersonRequest.empty()
-			request.firstName = "Jane"
-			
-			client.httpPost("/api/person", request.string(), {(response:HttpResponseHeader val, content:Array[U8] val)(h) => 
-				try
-					let persons = PersonResponse.fromString(String.from_array(content))?
-					let person = persons(0)?
-					h.complete( (person.firstName == "Jane") and (person.age == 27) and (persons.size() == 1) )
-				else
-					h.complete(false)
-				end
-			})
-			
-			request.firstName = "John"
-			client.httpPost("/api/person", request.string(), {(response:HttpResponseHeader val, content:Array[U8] val)(h) => 
-				try
-					let persons = PersonResponse.fromString(String.from_array(content))?
-					let person = persons(0)?
-					h.complete( (person.firstName == "John") and (person.age == 24) and (persons.size() == 1) )
-				else
-					h.complete(false)
-				end
-			})
+      let client = HttpClient.connect("127.0.0.1", "8080")?
+      
+      let request = PersonRequest.empty()
+      request.firstName = "Jane"
+      
+      client.httpPost("/api/person", request.string(), {(response:HttpResponseHeader val, content:Array[U8] val)(h) => 
+        try
+          let persons = PersonResponse.fromString(String.from_array(content))?
+          let person = persons(0)?
+          h.complete( (person.firstName == "Jane") and (person.age == 27) and (persons.size() == 1) )
+        else
+          h.complete(false)
+        end
+      })
+      
+      request.firstName = "John"
+      client.httpPost("/api/person", request.string(), {(response:HttpResponseHeader val, content:Array[U8] val)(h) => 
+        try
+          let persons = PersonResponse.fromString(String.from_array(content))?
+          let person = persons(0)?
+          h.complete( (person.firstName == "John") and (person.age == 24) and (persons.size() == 1) )
+        else
+          h.complete(false)
+        end
+      })
 
-		else
-			h.complete(false)
-		end
+    else
+      h.complete(false)
+    end
 
 class iso _Test5 is UnitTest
-	fun name(): String => "test 5 - www.chimerasw.com"
+  fun name(): String => "test 5 - www.chimerasw.com"
 
-	fun apply(h: TestHelper) =>
-		try
-			h.long_test(30_000_000_000)
+  fun apply(h: TestHelper) =>
+    try
+      h.long_test(30_000_000_000)
 
-			let client = HttpClient.connect("www.chimerasw.com", "80")?
-			client.httpGet("/index.html", {(response:HttpResponseHeader val, content:Array[U8] val)(h) => 
-				h.complete(response.statusCode == 200)
-			})
+      let client = HttpClient.connect("www.chimerasw.com", "80")?
+      client.httpGet("/index.html", {(response:HttpResponseHeader val, content:Array[U8] val)(h) => 
+        h.complete(response.statusCode == 200)
+      })
 
-		else
-			h.complete(false)
-		end
+    else
+      h.complete(false)
+    end
