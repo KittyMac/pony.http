@@ -1,0 +1,17 @@
+{
+  "deps": [
+    {
+      "locator": "github.com/KittyMac/pony.fileExt.git"
+    },
+    {
+      "locator": "github.com/KittyMac/pony.ttimer.git"
+    },
+    {
+      "locator": "github.com/KittyMac/pony.flow.git"
+    },
+    {
+      "locator": "github.com/KittyMac/pony.stringExt.git"
+    }
+  ],
+  "info": {}
+}

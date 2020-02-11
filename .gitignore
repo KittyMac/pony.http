@@ -7,3 +7,6 @@ comparison/crystal_server.dwarf
 comparison/hyper_server/target*
 public_html/big.lz
 public_html/big2.lz
+
+_corral
+_repos
