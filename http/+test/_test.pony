@@ -57,6 +57,12 @@ actor Main is TestList
 		test(_Test3)
 		test(_Test4)
 		test(_Test5)
+  
+	be testsFinished(test: PonyTest, success:Bool) =>
+    if success then
+      @exit[None](I32(0))
+    end
+		@exit[None](I32(1))
 	
  	fun @runtime_override_defaults(rto: RuntimeOptions) =>
 		rto.ponyanalysis = 1

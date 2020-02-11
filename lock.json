@@ -1,16 +1,16 @@
 {
   "locks": [
     {
-      "locator": "github.com/KittyMac/pony.fileExt.git"
+      "locator": "/Volumes/Development/Development/pony/pony.fileExt"
     },
     {
-      "locator": "github.com/KittyMac/pony.ttimer.git"
+      "locator": "/Volumes/Development/Development/pony/pony.ttimer"
     },
     {
-      "locator": "github.com/KittyMac/pony.flow.git"
+      "locator": "/Volumes/Development/Development/pony/pony.stringExt"
     },
     {
-      "locator": "github.com/KittyMac/pony.stringExt.git"
+      "locator": "/Volumes/Development/Development/pony/pony.flow"
     }
   ]
 }
