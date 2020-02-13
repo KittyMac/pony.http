@@ -24,7 +24,7 @@ actor HttpServer is TTimerNotify
   var activeConnectionPool:Array[HttpServerConnection]
   var totalConnections:USize = 0
   
-  var httpServices:Map[String box,HttpService val] val
+  var httpServices:HttpServiceMap
   
   var httpRequestTimeoutPeriod:U64 = 10_000
   
@@ -38,20 +38,20 @@ actor HttpServer is TTimerNotify
   new empty() =>
     freeConnectionPool = Array[HttpServerConnection]()
     activeConnectionPool = Array[HttpServerConnection]()
-    httpServices = recover Map[String box,HttpService val]() end
+    httpServices = HttpServiceMap(0)
     heartbeatTimer = TTimer(heartbeatTimerPeriod, this, false)
     heartbeatTimer.cancel()
   
   new create() =>
     freeConnectionPool = Array[HttpServerConnection]()
     activeConnectionPool = Array[HttpServerConnection]()
-    httpServices = recover Map[String box,HttpService val]() end
+    httpServices = HttpServiceMap(32)
     heartbeatTimer = TTimer(heartbeatTimerPeriod, this, false)
   
   new listen(host:String, port:String)? =>
     freeConnectionPool = Array[HttpServerConnection](2048)
     activeConnectionPool = Array[HttpServerConnection](2048)
-    httpServices = recover Map[String box,HttpService val]() end
+    httpServices = HttpServiceMap(32)
     heartbeatTimer = TTimer(heartbeatTimerPeriod, this, false)
     
     event = @pony_os_listen_tcp4[AsioEventID](this, host.cstring(), port.cstring())
@@ -113,12 +113,12 @@ actor HttpServer is TTimerNotify
       
           if freeConnectionPool.is_empty() then
             let connection = HttpServerConnection(this, httpRequestTimeoutPeriod)
-            connection.process(connectionSocket, httpServices)
+            connection.process(connectionSocket, httpServices.clone())
             activeConnectionPool.push(connection)
           else
             try 
               let connection = freeConnectionPool.pop()?
-              connection.process(connectionSocket, httpServices)
+              connection.process(connectionSocket, httpServices.clone())
               activeConnectionPool.push(connection)
             end
           end
@@ -134,16 +134,11 @@ actor HttpServer is TTimerNotify
       end
     end
   
-  be registerService(url:String val, service:HttpService val) =>
-    let httpServicesTrn:Map[String box,HttpService val] trn = recover Map[String box,HttpService val]() end
-    
-    // Copy over all of the existing services
-    for (k, v) in httpServices.pairs() do
-      httpServicesTrn(k) = v
-    end
-    httpServicesTrn(url) = service
-    
-    httpServices = consume httpServicesTrn    
+  be registerClassService(url:String val, service:HttpClassService val) =>
+    httpServices.registerClassService(url, service)
+  
+  be registerActorService(url:String val, service:HttpActorService tag) =>
+    httpServices.registerActorService(url, service)
     
     
   be connectionFinished(connection:HttpServerConnection) =>

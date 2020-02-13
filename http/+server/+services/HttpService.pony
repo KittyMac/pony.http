@@ -17,18 +17,28 @@ class val HttpServiceResponse
     statusCode = statusCode'
     contentType = contentType'
     content = content'
-    
 
-trait HttpService
+type HttpService is ( HttpClassService val | HttpActorService tag )
+
+trait HttpClassService
+  """
+  A service receives the parsed content of an HttpServerConnection, processes it, and returns the
+  payload to be connection by calling the respond() behaviour.
+  """
+  fun process(connection:HttpServerConnection, url:String val, params:String val, content:Array[U8] val):HttpServiceResponse =>
+    HttpServiceResponse(500, "text/html", "Service Unavailable")
+
+trait HttpActorService
   """
   A service receives the parsed content of an HttpServerConnection, processes it, and returns the
   payload to be connection by calling the respond() behaviour
   """
-  fun process(connection:HttpServerConnection, url:String val, params:String val, content:Array[U8] val):HttpServiceResponse =>
-    HttpServiceResponse(500, "text/html", "Service Unavailable")
+  be process(connection:HttpServerConnection, url:String val, params:String val, content:Array[U8] val) =>
+    connection.respond(HttpServiceResponse(500, "text/html", "Service Unavailable"))
+    
   
 
-primitive NullService is HttpService
+primitive NullService is HttpClassService
 
 primitive HttpServiceUtility
   fun httpStatusString(code:U32):String =>

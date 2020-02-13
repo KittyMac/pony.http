@@ -21,7 +21,7 @@ actor HttpServerConnection
   
   var state:U32 = HttpServerConnectionState.header()
   
-  var serviceMap:Map[String box,HttpService val] val
+  var serviceMap:HttpServiceMap val
   
   let maxReadBufferSize:USize = 4 * 1024 * 1024
   var readBuffer:Array[U8]
@@ -56,7 +56,7 @@ actor HttpServerConnection
     server = server'
     httpRequestTimeoutPeriodInNanoseconds = httpRequestTimeoutPeriodInMilliseconds * 1_000_000
     
-    serviceMap = recover Map[String box,HttpService val]() end
+    serviceMap = recover HttpServiceMap(0) end
     readBuffer = Array[U8](maxReadBufferSize)
     fileReadBuffer = Array[U8](maxReadBufferSize)
     fileReadFD = 0
@@ -70,7 +70,7 @@ actor HttpServerConnection
     
     markTimeoutActivity()
     
-  be process(socket':U32, serviceMap':Map[String box,HttpService val] val) =>
+  be process(socket':U32, serviceMap':HttpServiceMap val) =>
     socket = socket'
     serviceMap = serviceMap'
     
@@ -217,23 +217,22 @@ actor HttpServerConnection
     
       if AsioEvent.readable(flags) then
         if read() then
-        
-          // We've completely read the request, process it against the matching service
-          var service:HttpService val = NullService
-          try
-            service = serviceMap(httpCommandUrl)?
-          else
-            try
-              service = serviceMap("*")?
-            end
-          end
                     
           (httpCommandUrl, let httpCommandUrlVal) = consumeFieldString(consume httpCommandUrl)
           (httpCommandParameters, let httpCommandParametersVal) = consumeFieldString(consume httpCommandParameters)
           (httpContent, let httpContentVal) = consumeFieldArray(consume httpContent)
-                    
-          respondNow(service.process(this, httpCommandUrlVal, httpCommandParametersVal, httpContentVal))
-
+          
+          // First we check class services (they're more performant), then check actor services, then fallback to null service
+          try
+            match serviceMap.typeOfService(httpCommandUrlVal)
+            | 0 => respondNow(NullService.process(this, httpCommandUrlVal, httpCommandParametersVal, httpContentVal))
+            | 1 => respondNow(serviceMap.getClassService(httpCommandUrlVal)?.process(this, httpCommandUrlVal, httpCommandParametersVal, httpContentVal))
+            | 2 => serviceMap.getActorService(httpCommandUrlVal)?.process(this, httpCommandUrlVal, httpCommandParametersVal, httpContentVal)
+            end
+          else
+            @fprintf[I32](@pony_os_stdout[Pointer[U8]](), ("Error while mapping service for " + httpCommandUrlVal).cstring())
+          end
+                
         end
         
         // If we get here and we're still active, we need to reschedule ourselves for more data

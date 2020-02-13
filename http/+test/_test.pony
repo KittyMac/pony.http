@@ -3,11 +3,11 @@ use "collections"
 use "fileext"
 use "stringext"
 
-primitive HelloWorldService is HttpService
+primitive HelloWorldService is HttpClassService
   fun process(connection:HttpServerConnection, url:String val, params:String val, content:Array[U8] val):HttpServiceResponse =>
     HttpServiceResponse(200, "text/plain", "Hello World")
 
-class TestJsonAPI is HttpService
+class TestJsonAPI is HttpClassService
   // look up and return people by matching first name or last name
   let people:PersonResponse val
   
@@ -35,21 +35,32 @@ class TestJsonAPI is HttpService
       HttpServiceResponse(500, "text/html", "Service Unavailable")
     end
 
-
-
+actor ActorJsonAPI is HttpActorService
+  be process(connection:HttpServerConnection, url:String val, params:String val, content:Array[U8] val) =>
+    connection.respond(HttpServiceResponse(200, "text/plain", "Hello World from an actor"))
 
 
 actor Main is TestList
-  new create(env: Env) => PonyTest(env, this)
+  var isCI:Bool = false
+  
+  new create(env: Env) => 
+    for v in env.vars.values() do
+      if StringExt.startswith(v, "CI=") then
+        isCI = true
+      end
+    end
+    PonyTest(env, this)
   new make() => None
 
   fun tag tests(test: PonyTest) =>
     
     try
       let server = HttpServer.listen("0.0.0.0", "8080")?
-      server.registerService("/api/person", TestJsonAPI)
-      server.registerService("/hello/world", HelloWorldService)
-      server.registerService("*", HttpFileService.default())
+      
+      server.registerActorService("/api/actor", ActorJsonAPI)
+      server.registerClassService("/api/person", TestJsonAPI)
+      server.registerClassService("/hello/world", HelloWorldService)
+      server.registerClassService("*", HttpFileService.default())
     end
     
     test(_Test1)
@@ -57,12 +68,17 @@ actor Main is TestList
     test(_Test3)
     test(_Test4)
     test(_Test5)
+    test(_Test6)
   
   be testsFinished(test: PonyTest, success:Bool) =>
-    if success then
-      @exit[None](I32(0))
+    // is we're running on the CI, we want to end. Otherwise,
+    // leave the server running
+    if isCI then
+      if success then
+        @exit[None](I32(0))
+      end
+      @exit[None](I32(1))
     end
-    @exit[None](I32(1))
   
   fun @runtime_override_defaults(rto: RuntimeOptions) =>
     rto.ponyanalysis = 1
@@ -184,6 +200,22 @@ class iso _Test5 is UnitTest
 
       let client = HttpClient.connect("www.chimerasw.com", "80")?
       client.httpGet("/index.html", {(response:HttpResponseHeader val, content:Array[U8] val)(h) => 
+        h.complete(response.statusCode == 200)
+      })
+
+    else
+      h.complete(false)
+    end
+
+class iso _Test6 is UnitTest
+  fun name(): String => "test 2 - actor service"
+
+  fun apply(h: TestHelper) =>
+    try
+      h.long_test(30_000_000_000)
+
+      let client = HttpClient.connect("127.0.0.1", "8080")?
+      client.httpGet("/api/actor", {(response:HttpResponseHeader val, content:Array[U8] val)(h) => 
         h.complete(response.statusCode == 200)
       })
 

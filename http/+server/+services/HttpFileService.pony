@@ -2,7 +2,7 @@ use "collections"
 use "stringext"
 use "fileext"
 
-class HttpFileService is HttpService
+class HttpFileService is HttpClassService
   let webRoot:String
   let allowDotFiles:Bool
 
