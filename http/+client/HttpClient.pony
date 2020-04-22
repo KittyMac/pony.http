@@ -26,7 +26,9 @@ actor HttpClient
     pendingRequestWrites = Array[HttpRequest](128)
     pendingRequestReads = Array[HttpRequest](128)
     
-    _connect(host, port, from)?
+    _connect(host, port, from)
+    
+    if false then error end
   
   new download(url:String, callback:HttpRequestCallback val)? =>
     // a "one shot" method to download the content of a url
@@ -58,7 +60,7 @@ actor HttpClient
     httpGet(path + file, callback)
     
   
-  fun ref _connect(host:String, port:String, from: String = "")? =>
+  be _connect(host:String, port:String, from: String = "") =>
     let addresses:Array[NetAddress] val = DNS(None, host, port)
     var hostString = host
     var portString = port
@@ -71,9 +73,7 @@ actor HttpClient
   
     httpHost = StringExt.format("Host: %s\r\n", host)
   
-    @pony_os_connect_tcp4[U32](this, hostString.cstring(), portString.cstring(), from.cstring(), AsioEvent.read_write_oneshot())
-  
-    if false then error end
+    @pony_os_connect_tcp4[U32](this, hostString.cstring(), portString.cstring(), from.cstring(), AsioEvent.read_write_oneshot())  
   
   fun _is_sock_connected(fd: U32): Bool =>
     (let errno: U32, let value: U32) = OSSocket.get_so_error(fd)
