@@ -48,9 +48,11 @@ actor HttpServerConnection
   var fileReadFD:I32
   var fileReadBuffer:Array[U8]
   
+  var response_count:U64 = 0
+  
   fun _tag():USize => 2
   fun _batch():USize => 5_000
-  fun _priority():USize => 1    
+  fun _priority():USize => 1
   
   new create(server':HttpServer, httpRequestTimeoutPeriodInMilliseconds:U64) =>
     server = server'
@@ -106,13 +108,14 @@ actor HttpServerConnection
       while (httpResponseWriteOffset < httpResponse.size()) or readNextChunkOfResponseContent() do
         let n = @pony_os_send[USize](event, httpResponse.cpointer(httpResponseWriteOffset), httpResponse.size() - httpResponseWriteOffset)?
         if n == 0 then
-              @pony_asio_event_set_writeable(event, false)
-              @pony_asio_event_resubscribe_write(event)
+          @pony_asio_event_set_writeable(event, false)
+          @pony_asio_event_resubscribe_write(event)
           return
         end
         httpResponseWriteOffset = httpResponseWriteOffset + n
       end
       
+      response_count = response_count + 1
       resetWriteForNextResponse()
     else
       httpResponseWriteOffset = 0
@@ -453,9 +456,11 @@ actor HttpServerConnection
   
   fun ref closeNow() =>
     if event != AsioEvent.none() then
-          @pony_asio_event_unsubscribe(event)
+      @pony_asio_event_unsubscribe(event)
       //@pony_asio_event_destroy(event)
       event = AsioEvent.none()
+      
+      @printf[I32]("response_count: %llu\n".cstring(), response_count)
     
       @pony_os_socket_close[None](socket)     
       socket = 0

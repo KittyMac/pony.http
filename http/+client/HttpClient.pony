@@ -1,6 +1,7 @@
 use "collections"
 use "stringext"
 use "net"
+use "regex"
 
 actor HttpClient
   """
@@ -25,6 +26,39 @@ actor HttpClient
     pendingRequestWrites = Array[HttpRequest](128)
     pendingRequestReads = Array[HttpRequest](128)
     
+    _connect(host, port, from)?
+  
+  new download(url:String, callback:HttpRequestCallback val)? =>
+    // a "one shot" method to download the content of a url
+    pendingRequestWrites = Array[HttpRequest](128)
+    pendingRequestReads = Array[HttpRequest](128)
+        
+    // 1. parse the relevant information from the url
+    let userAgentRegex = try Regex("^((http[s]?|ftp):\\/)?\\/?([^:\\/\\s]+)((\\/\\w+)*\\/)([\\w\\-\\.]+[^#?\\s]+)(.*)?(#[\\w\\-]+)?$")? else Regex.empty() end
+    let matched = userAgentRegex(url)?
+    
+    let protocol:String val = matched(2)?
+    let host:String val = matched(3)?
+    let path:String val = matched(4)?
+    let file:String val = matched(6)?
+    //let query:String val = try matched(7)? else "" end
+    //let hash:String val = try matched(8)? else "" end
+    
+    let port = match protocol
+    | "http" => "80"
+    | "https" => "443"
+    else error end
+    
+    //@printf[I32]("%s | %s | %s | %s | %s | %s\n".cstring(), protocol.cstring(), host.cstring(), path.cstring(), file.cstring(), query.cstring(), hash.cstring())
+    
+    // 2. connect to the host
+    _connect(host, port, "")?
+    
+    // 3. request the desired information
+    httpGet(path + file, callback)
+    
+  
+  fun ref _connect(host:String, port:String, from: String = "")? =>
     let addresses:Array[NetAddress] val = DNS(None, host, port)
     var hostString = host
     var portString = port
@@ -34,11 +68,11 @@ actor HttpClient
         break
       end
     end
-    
+  
     httpHost = StringExt.format("Host: %s\r\n", host)
-    
+  
     @pony_os_connect_tcp4[U32](this, hostString.cstring(), portString.cstring(), from.cstring(), AsioEvent.read_write_oneshot())
-    
+  
     if false then error end
   
   fun _is_sock_connected(fd: U32): Bool =>
@@ -59,8 +93,8 @@ actor HttpClient
         socket = @pony_asio_event_fd(event)
         if _is_sock_connected(socket) then
           //@fprintf[I32](@pony_os_stdout[Pointer[U8]](), "socket connected on fd %d\n".cstring(), socket)
-              @pony_asio_event_set_writeable(event, false)
-              @pony_asio_event_resubscribe_write(event)
+          @pony_asio_event_set_writeable(event, false)
+          @pony_asio_event_resubscribe_write(event)
         else
           close()
         end
@@ -85,8 +119,8 @@ actor HttpClient
           if request.read(event) then
             pendingRequestReads.shift()?
             
-                @pony_asio_event_set_writeable(event, false)
-                @pony_asio_event_resubscribe_write(event)
+            @pony_asio_event_set_writeable(event, false)
+            @pony_asio_event_resubscribe_write(event)
           end
         end
       end

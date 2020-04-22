@@ -111,8 +111,8 @@ class HttpRequest
       while writeOffset < httpRequestString.size() do
         let n = @pony_os_send[USize](event, httpRequestString.cpointer(writeOffset), httpRequestString.size() - writeOffset)?
         if n == 0 then
-              @pony_asio_event_set_writeable(event, false)
-              @pony_asio_event_resubscribe_write(event)
+          @pony_asio_event_set_writeable(event, false)
+          @pony_asio_event_resubscribe_write(event)
           @ponyint_actor_yield[None](this)
           return false
         end

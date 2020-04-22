@@ -69,6 +69,7 @@ actor Main is TestList
     test(_Test4)
     test(_Test5)
     test(_Test6)
+    test(_Test7)
   
   be testsFinished(test: PonyTest, success:Bool) =>
     // is we're running on the CI, we want to end. Otherwise,
@@ -81,10 +82,10 @@ actor Main is TestList
     end
   
   fun @runtime_override_defaults(rto: RuntimeOptions) =>
-    rto.ponyanalysis = 1
+    rto.ponyanalysis = 0
     rto.ponynoscale = true
     rto.ponynoblock = true
-    rto.ponynoyield = true
+    //rto.ponynoyield = true
     rto.ponygcinitial = 0
     rto.ponygcfactor = 1.0
 
@@ -218,6 +219,21 @@ class iso _Test6 is UnitTest
       client.httpGet("/api/actor", {(response:HttpResponseHeader val, content:Array[U8] val)(h) => 
         h.complete(response.statusCode == 200)
       })
+
+    else
+      h.complete(false)
+    end
+
+class iso _Test7 is UnitTest
+  fun name(): String => "test 7 - full url download"
+
+  fun apply(h: TestHelper) =>
+    try
+      h.long_test(30_000_000_000)
+
+      HttpClient.download("http://www.chimerasw.com/starbaseorion/wp-content/uploads/2011/04/starbasecommand.jpg", {(response:HttpResponseHeader val, content:Array[U8] val)(h) =>         
+        h.complete(response.statusCode == 200)
+      })?
 
     else
       h.complete(false)

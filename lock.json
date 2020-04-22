@@ -11,6 +11,9 @@
     },
     {
       "locator": "/Volumes/Development/Development/pony/pony.flow"
+    },
+    {
+      "locator": "/Volumes/Development/Development/pony/regex"
     }
   ]
 }
