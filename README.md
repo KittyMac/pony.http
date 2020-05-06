@@ -1,21 +1,11 @@
 # pony.http
 
-**WARNING** This code only compiles with [my fork of Pony](https://github.com/KittyMac/ponyc/tree/roc_master).
 
-### Purpose
+**WARNING**
 
-To provide a barebones http-like server for Pony, while also being a learning vehicle for me. 
+This was a fun experiment in learning and writing a bare-bones, highly performant http server in Pony.  However, now that [the old, semi-official http server is being replaced with a new, better http server](https://ponylang.zulipchat.com/#narrow/stream/190363-projects/topic/http) I have decided to switch over to using that combined with [Jennet](https://github.com/Theodus/jennet).
 
-Note: This is a very early and generally specialized implementation.  You should avoid using the code in this repository if you are looking for a full-featured http server.
-
-
-
-### TODOs
-
-- Http client connect to server code (in progress)
-
-- Fail on http requests which exceed a maximum size
-- Support more of things in HTTP 1.1 (specifically compression and ssl)
+I am leaving this repository here for the time being, but I imagine that some point in the not too distant future it will be archived.
 
 ## License
 
